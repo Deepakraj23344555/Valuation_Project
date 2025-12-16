@@ -8,38 +8,70 @@ from io import BytesIO
 # --- 1. CONFIGURATION & STYLING ---
 st.set_page_config(page_title="GT Valuation Analytics", page_icon="💼", layout="wide")
 
-# Custom CSS for a professional "FinTech" look
+# --- EXECUTIVE THEME CSS (Deep Navy & White) ---
 st.markdown("""
     <style>
-    /* Main Background */
-    .main { background-color: #FAFAFA; }
+    /* 1. Main Background - Clean White */
+    .stApp { 
+        background-color: #F7F9FC; 
+    }
     
-    /* Headings */
-    h1, h2, h3 { color: #2C3E50; font-family: 'Helvetica Neue', sans-serif; font-weight: 600; }
+    /* 2. Sidebar Background - Deep Navy */
+    section[data-testid="stSidebar"] {
+        background-color: #1A202C; 
+    }
     
-    /* Metrics Styling - Clean & Sharp */
-    div[data-testid="stMetricValue"] { font-size: 26px; color: #4B0082; font-weight: 700;}
+    /* 3. Sidebar Text Color - White/Grey for contrast */
+    section[data-testid="stSidebar"] h1, 
+    section[data-testid="stSidebar"] h2, 
+    section[data-testid="stSidebar"] span, 
+    section[data-testid="stSidebar"] label, 
+    section[data-testid="stSidebar"] div,
+    section[data-testid="stSidebar"] p {
+        color: #E2E8F0 !important; 
+    }
     
-    /* Sidebar Styling */
-    section[data-testid="stSidebar"] { background-color: #F8F9FA; }
+    /* 4. Main Headings - Dark Grey */
+    h1, h2, h3 { 
+        color: #2D3748; 
+        font-family: 'Helvetica Neue', sans-serif; 
+        font-weight: 700; 
+    }
     
-    /* Button Styling - Flat Design */
-    .stButton>button { 
-        background-color: #4B0082; 
-        color: white; 
-        border-radius: 4px; 
+    /* 5. Metric Cards - Corporate Blue Accent */
+    div[data-testid="stMetricValue"] { 
+        color: #2B6CB0; 
+        font-weight: 700; 
+        font-size: 28px;
+    }
+    div[data-testid="stMetricLabel"] {
+        font-weight: 600;
+        color: #4A5568;
+    }
+    
+    /* 6. Professional Buttons */
+    .stButton>button {
+        background-color: #3182CE; /* Corporate Blue */
+        color: white;
+        border-radius: 4px;
         border: none;
         font-weight: 600;
         padding: 0.5rem 1rem;
+        width: 100%;
     }
-    .stButton>button:hover {
-        background-color: #38006b;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    .stButton>button:hover { 
+        background-color: #2C5282; 
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     }
     
-    /* Tab Styling */
-    .stTabs [data-baseweb="tab-list"] { gap: 24px; }
-    .stTabs [data-baseweb="tab"] { height: 50px; white-space: pre-wrap; background-color: white; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    /* 7. Tab Styling */
+    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
+    .stTabs [data-baseweb="tab"] { 
+        background-color: #FFFFFF; 
+        border-radius: 4px 4px 0 0; 
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05); 
+        padding: 10px 20px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -70,11 +102,11 @@ def calculate_wacc(rf, beta, erp, cost_debt, tax_rate, equity_weight, debt_weigh
 
 # --- 3. SIDEBAR NAVIGATION ---
 with st.sidebar:
-    st.title("💼 Valuation Engine") # Professional Briefcase Icon
-    st.caption("Grant Thornton | Live Project v1.0")
+    st.title("💼 Valuation Engine") 
+    st.caption("Grant Thornton | Live Project v1.2")
     st.markdown("---")
     
-    # Using "Abstract" icons looks more like software UI
+    # Navigation Radio Button
     nav = st.radio("Navigation Module", 
         ["🗂️ Data Manager", 
          "⚖️ Cost of Capital (WACC)", 
@@ -93,7 +125,8 @@ with st.sidebar:
 if nav == "🗂️ Data Manager":
     st.title("🗂️ Data Management")
     st.markdown("Initialize the model by importing client financial data.")
-    
+    st.divider()
+
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("1. Template Access")
@@ -118,11 +151,12 @@ if nav == "🗂️ Data Manager":
 elif nav == "⚖️ Cost of Capital (WACC)":
     st.title("⚖️ Cost of Capital Builder")
     st.markdown("Configure the discount rate using the **Capital Asset Pricing Model (CAPM)**.")
+    st.divider()
     
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.markdown("#### Equity Parameters") # Markdown headers look cleaner
+        st.markdown("#### Equity Parameters") 
         rf = st.number_input("Risk-Free Rate (Rf) %", 3.0, 10.0, 4.25) / 100
         beta = st.number_input("Levered Beta (β)", 0.5, 3.0, 1.15)
         erp = st.number_input("Market Risk Premium (Rm-Rf) %", 5.0, 15.0, 10.0) / 100
@@ -138,14 +172,15 @@ elif nav == "⚖️ Cost of Capital (WACC)":
         debt_percent = 1 - equity_percent
         st.write(f"**Debt %:** {debt_percent:.0%}")
         
-    # Calculate
+    # Calculate Logic
     calc_wacc, cost_equity = calculate_wacc(rf, beta, erp, cost_debt, tax_rate, equity_percent, debt_percent)
     
     # Save WACC to session
     st.session_state['wacc'] = calc_wacc
     st.session_state['tax_rate'] = tax_rate
     
-    st.divider()
+    st.markdown("---")
+    st.subheader("Results")
     metric1, metric2, metric3 = st.columns(3)
     metric1.metric("Cost of Equity (Ke)", f"{cost_equity:.2%}")
     metric2.metric("Post-Tax Cost of Debt (Kd)", f"{cost_debt * (1-tax_rate):.2%}")
@@ -195,6 +230,8 @@ elif nav == "💎 Intrinsic Valuation":
         kpi2.metric("PV of Terminal Value", f"${pv_tv:,.0f}", f"{(pv_tv/enterprise_value)*100:.1f}% of Total")
         kpi3.metric("Discount Rate (WACC)", f"{wacc:.2%}")
         
+        st.divider()
+        
         # Visuals
         tab1, tab2 = st.tabs(["Waterfall Breakdown", "Sensitivity Heatmap"])
         
@@ -243,7 +280,8 @@ elif nav == "⚡ Stress Testing (VaR)":
     else:
         st.title("⚡ Value at Risk (VaR) Analysis")
         st.markdown("**Objective:** Stress-test the valuation using stochastic modeling.")
-        
+        st.divider()
+
         col1, col2 = st.columns(2)
         with col1:
             iterations = st.selectbox("Simulation Iterations (N)", [1000, 5000, 10000, 50000], index=1)
@@ -252,8 +290,6 @@ elif nav == "⚡ Stress Testing (VaR)":
         with col2:
             volatility = st.slider("Implied Volatility (σ)", 5, 40, 15) / 100
             st.caption("Standard Deviation based on historical peer volatility.")
-
-        st.divider()
 
         if st.button("▶️ Execute Monte Carlo Simulation"):
             with st.spinner(f"Computing {iterations:,} scenarios..."):
