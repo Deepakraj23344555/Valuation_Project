@@ -8,69 +8,73 @@ from io import BytesIO
 # --- 1. CONFIGURATION & STYLING ---
 st.set_page_config(page_title="GT Valuation Analytics", page_icon="💼", layout="wide")
 
-# --- EXECUTIVE THEME CSS (Deep Navy & White) ---
+# --- EXECUTIVE THEME CSS (Fixed Visibility) ---
 st.markdown("""
     <style>
-    /* 1. Main Background - Clean White */
+    /* 1. Main Background - Professional Platinum Gray */
     .stApp { 
-        background-color: #F7F9FC; 
+        background-color: #F0F2F6; 
     }
     
-    /* 2. Sidebar Background - Deep Navy */
+    /* 2. Sidebar Background - Dark Navy */
     section[data-testid="stSidebar"] {
-        background-color: #1A202C; 
+        background-color: #111827; /* Very Dark Navy */
     }
     
-    /* 3. Sidebar Text Color - White/Grey for contrast */
+    /* 3. Text Visibility Fix - Global */
+    h1, h2, h3, h4, h5, h6 {
+        color: #1F2937 !important; /* Dark Charcoal for Headings */
+        font-family: 'Helvetica Neue', sans-serif;
+    }
+    p, div, label, span {
+        color: #374151; /* Standard Gray for body text */
+    }
+    
+    /* 4. Sidebar Text Color - Override to White */
     section[data-testid="stSidebar"] h1, 
     section[data-testid="stSidebar"] h2, 
     section[data-testid="stSidebar"] span, 
     section[data-testid="stSidebar"] label, 
     section[data-testid="stSidebar"] div,
     section[data-testid="stSidebar"] p {
-        color: #E2E8F0 !important; 
+        color: #F9FAFB !important; /* White/Light Gray */
     }
     
-    /* 4. Main Headings - Dark Grey */
-    h1, h2, h3 { 
-        color: #2D3748; 
-        font-family: 'Helvetica Neue', sans-serif; 
-        font-weight: 700; 
-    }
-    
-    /* 5. Metric Cards - Corporate Blue Accent */
+    /* 5. Metric Cards - High Contrast */
     div[data-testid="stMetricValue"] { 
-        color: #2B6CB0; 
-        font-weight: 700; 
-        font-size: 28px;
+        font-size: 28px; 
+        color: #4B0082; /* GT Purple */
+        font-weight: 700;
     }
     div[data-testid="stMetricLabel"] {
         font-weight: 600;
-        color: #4A5568;
+        color: #4B5563; /* Dark Gray */
     }
     
     /* 6. Professional Buttons */
     .stButton>button {
-        background-color: #3182CE; /* Corporate Blue */
-        color: white;
-        border-radius: 4px;
+        background-color: #4B0082; /* GT Purple */
+        color: white !important;
+        border-radius: 6px;
         border: none;
         font-weight: 600;
         padding: 0.5rem 1rem;
         width: 100%;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
     }
     .stButton>button:hover { 
-        background-color: #2C5282; 
-        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        background-color: #38006b; 
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
     
-    /* 7. Tab Styling */
-    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
+    /* 7. Containers/Tabs (White Cards on Gray Background) */
+    .stTabs [data-baseweb="tab-list"] { gap: 8px; }
     .stTabs [data-baseweb="tab"] { 
         background-color: #FFFFFF; 
         border-radius: 4px 4px 0 0; 
-        box-shadow: 0 1px 2px rgba(0,0,0,0.05); 
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05); 
         padding: 10px 20px;
+        color: #374151; /* Text inside tabs */
     }
     </style>
     """, unsafe_allow_html=True)
@@ -103,7 +107,7 @@ def calculate_wacc(rf, beta, erp, cost_debt, tax_rate, equity_weight, debt_weigh
 # --- 3. SIDEBAR NAVIGATION ---
 with st.sidebar:
     st.title("💼 Valuation Engine") 
-    st.caption("Grant Thornton | Live Project v1.2")
+    st.caption("Grant Thornton | Live Project v1.3")
     st.markdown("---")
     
     # Navigation Radio Button
@@ -245,7 +249,7 @@ elif nav == "💎 Intrinsic Valuation":
                 textposition = "outside",
                 text = [f"${df['PV_UFCF'].sum():,.0f}", f"${pv_tv:,.0f}", f"${enterprise_value:,.0f}"]
             ))
-            fig.update_layout(title="Enterprise Value Composition", template="plotly_white")
+            fig.update_layout(title="Enterprise Value Composition", template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
             st.plotly_chart(fig, use_container_width=True)
             
         with tab2:
@@ -269,6 +273,7 @@ elif nav == "💎 Intrinsic Valuation":
                                 x=[f"{x:.1%}" for x in tgr_range],
                                 y=[f"{y:.1%}" for y in wacc_range],
                                 text_auto='.2s', aspect="auto", color_continuous_scale='RdYlGn')
+            fig_heat.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
             st.plotly_chart(fig_heat, use_container_width=True)
 
 # --------------------------
@@ -322,7 +327,7 @@ elif nav == "⚡ Stress Testing (VaR)":
                 fig_hist.add_vline(x=mean_val, line_dash="dash", line_color="black", annotation_text="Mean")
                 fig_hist.add_vline(x=var_95, line_dash="dot", line_color="red", annotation_text="VaR (5%)")
                 
-                fig_hist.update_layout(template="plotly_white", xaxis_title="Enterprise Value ($)", yaxis_title="Frequency")
+                fig_hist.update_layout(template="plotly_white", xaxis_title="Enterprise Value ($)", yaxis_title="Frequency", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
                 st.plotly_chart(fig_hist, use_container_width=True)
 
 # --------------------------
