@@ -8,7 +8,7 @@ from io import BytesIO
 # --- 1. CONFIGURATION & STYLING ---
 st.set_page_config(page_title="GT Valuation Analytics", page_icon="📊", layout="wide")
 
-# Custom CSS for a "SaaS" look
+# Custom CSS for a professional "FinTech" look
 st.markdown("""
     <style>
     /* Main Background */
@@ -20,11 +20,16 @@ st.markdown("""
     /* Metrics Styling */
     div[data-testid="stMetricValue"] { font-size: 24px; color: #4B0082; }
     
-    /* Cards for Logic */
-    .css-1r6slb0 { background-color: white; border-radius: 10px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-    
     /* Button Styling */
-    .stButton>button { background-color: #4B0082; color: white; border-radius: 5px; }
+    .stButton>button { 
+        background-color: #4B0082; 
+        color: white; 
+        border-radius: 5px; 
+        border: none;
+    }
+    .stButton>button:hover {
+        background-color: #38006b;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -48,19 +53,18 @@ def generate_template():
 
 def calculate_wacc(rf, beta, erp, cost_debt, tax_rate, equity_weight, debt_weight):
     """Calculates WACC using CAPM."""
-    cost_equity = rf + beta * (erp - rf) # CAPM
+    cost_equity = rf + beta * (erp - rf) # CAPM Formula
     after_tax_cost_debt = cost_debt * (1 - tax_rate)
     wacc = (cost_equity * equity_weight) + (after_tax_cost_debt * debt_weight)
     return wacc, cost_equity
 
 # --- 3. SIDEBAR NAVIGATION ---
 with st.sidebar:
-    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Python-logo-notext.svg/1200px-Python-logo-notext.svg.png", width=50)
     st.title("Valuation Toolkit")
-    
-    nav = st.radio("Navigate", ["📂 Data Upload", "🧮 WACC Builder", "📊 DCF Analysis", "🎲 Risk Simulation"])
-    
-    st.info("ℹ️ **Pro Tip:** Start by uploading the standard data template in the 'Data Upload' tab.")
+    st.markdown("---")
+    nav = st.radio("Navigate", ["📂 Data Upload", "🧮 WACC Builder", "📊 DCF Analysis", "🎲 Risk Simulation", "📘 Methodology"])
+    st.markdown("---")
+    st.caption("v1.2 | Grant Thornton Live Project")
 
 # --- 4. MAIN APP LOGIC ---
 
@@ -84,7 +88,7 @@ if nav == "📂 Data Upload":
         
         if uploaded_file:
             df = pd.read_excel(uploaded_file)
-            st.session_state['data'] = df # Save to session state to use across tabs
+            st.session_state['data'] = df # Save to session state
             st.success("✅ Data Loaded Successfully!")
             st.dataframe(df.head(), use_container_width=True)
 
@@ -99,18 +103,18 @@ elif nav == "🧮 WACC Builder":
     
     with col1:
         st.subheader("Equity Assumptions")
-        rf = st.number_input("Risk-Free Rate (%)", 3.0, 10.0, 4.0) / 100
-        beta = st.number_input("Beta (Risk)", 0.5, 3.0, 1.2)
+        rf = st.number_input("Risk-Free Rate (%)", 3.0, 10.0, 4.25) / 100
+        beta = st.number_input("Beta (Risk)", 0.5, 3.0, 1.15)
         erp = st.number_input("Market Return (%)", 5.0, 15.0, 10.0) / 100
         
     with col2:
         st.subheader("Debt Assumptions")
-        cost_debt = st.number_input("Pre-Tax Cost of Debt (%)", 2.0, 15.0, 6.0) / 100
+        cost_debt = st.number_input("Pre-Tax Cost of Debt (%)", 2.0, 15.0, 6.5) / 100
         tax_rate = st.number_input("Corporate Tax Rate (%)", 15.0, 40.0, 25.0) / 100
         
     with col3:
         st.subheader("Capital Structure")
-        equity_percent = st.slider("Equity %", 0, 100, 70) / 100
+        equity_percent = st.slider("Equity %", 0, 100, 75) / 100
         debt_percent = 1 - equity_percent
         st.write(f"**Debt %:** {debt_percent:.0%}")
         
@@ -162,6 +166,9 @@ elif nav == "📊 DCF Analysis":
         
         enterprise_value = df['PV_UFCF'].sum() + pv_tv
         
+        # SAVE TO STATE (For Risk Tab)
+        st.session_state['enterprise_value'] = enterprise_value
+        
         # --- OUTPUT ---
         kpi1, kpi2, kpi3 = st.columns(3)
         kpi1.metric("Implied Enterprise Value", f"${enterprise_value:,.0f}")
@@ -181,12 +188,12 @@ elif nav == "📊 DCF Analysis":
                 textposition = "outside",
                 text = [f"${df['PV_UFCF'].sum():,.0f}", f"${pv_tv:,.0f}", f"${enterprise_value:,.0f}"]
             ))
+            fig.update_layout(title="Enterprise Value Composition")
             st.plotly_chart(fig, use_container_width=True)
             
         with tab2:
             st.subheader("Sensitivity Analysis: EV based on WACC vs. Growth Rate")
             
-            # Create Sensitivity Grid
             wacc_range = [wacc - 0.02, wacc - 0.01, wacc, wacc + 0.01, wacc + 0.02]
             tgr_range = [tgr - 0.01, tgr - 0.005, tgr, tgr + 0.005, tgr + 0.01]
             
@@ -194,14 +201,12 @@ elif nav == "📊 DCF Analysis":
             for w in wacc_range:
                 row = []
                 for g in tgr_range:
-                    # Quick Recalc
                     term_val = (last_ufcf * (1 + g)) / (w - g)
                     pv_term = term_val * (1 / ((1 + w) ** len(df)))
                     pv_explicit = (df['UFCF'] * (1 / ((1 + w) ** df['Period']))).sum()
                     row.append(pv_term + pv_explicit)
                 sensitivity_data.append(row)
                 
-            # Heatmap
             fig_heat = px.imshow(sensitivity_data,
                                 labels=dict(x="Terminal Growth Rate", y="WACC", color="Enterprise Value"),
                                 x=[f"{x:.1%}" for x in tgr_range],
@@ -209,29 +214,88 @@ elif nav == "📊 DCF Analysis":
                                 text_auto='.2s', aspect="auto", color_continuous_scale='RdYlGn')
             st.plotly_chart(fig_heat, use_container_width=True)
 
-
 # --------------------------
-# TAB 4: RISK SIMULATION
+# TAB 4: RISK SIMULATION (Updated)
 # --------------------------
 elif nav == "🎲 Risk Simulation":
-    if 'data' not in st.session_state:
-        st.warning("⚠️ Upload data first.")
+    if 'enterprise_value' not in st.session_state:
+        st.warning("⚠️ Please run the 'DCF Analysis' tab first to generate a base valuation.")
     else:
         st.title("🎲 Monte Carlo Simulation")
-        st.markdown("Quantify valuation risk by simulating 5,000 scenarios of Revenue Volatility.")
+        st.markdown("**Objective:** Stress-test the valuation using stochastic modeling.")
         
-        volatility = st.slider("Revenue Volatility Assumption (+/- %)", 5, 25, 10) / 100
+        col1, col2 = st.columns(2)
+        with col1:
+            # Dropdown for iterations
+            iterations = st.selectbox("Number of Iterations (N)", [1000, 5000, 10000, 50000], index=1)
+            st.caption("Higher N = Higher Statistical Convergence")
         
-        if st.button("▶️ Run Simulation"):
-            # Simplified Logic for Speed
-            base_ev = 10000 # Placeholder for demo, ideally fetch from calculated EV
-            
-            # Create distribution
-            mu, sigma = base_ev, base_ev * volatility
-            s = np.random.normal(mu, sigma, 5000)
-            
-            fig_hist = px.histogram(s, nbins=50, title="Probability Distribution of Enterprise Value")
-            fig_hist.add_vline(x=np.mean(s), line_color="red", annotation_text="Mean EV")
-            st.plotly_chart(fig_hist, use_container_width=True)
-            
-            st.success("Analysis: The wide spread indicates high sensitivity to revenue shocks.")
+        with col2:
+            volatility = st.slider("Revenue Volatility (σ)", 5, 40, 15) / 100
+            st.caption("Standard Deviation of asset value")
+
+        st.divider()
+
+        if st.button("▶️ Run Monte Carlo Simulation"):
+            with st.spinner(f"Running {iterations:,} stochastic scenarios..."):
+                
+                # Logic: Geometric Brownian Motion Proxy
+                base_ev = st.session_state['enterprise_value']
+                mu = 0 
+                sigma = volatility
+                shocks = np.random.normal(mu, sigma, iterations)
+                simulated_values = base_ev * (1 + shocks)
+                
+                # Metrics
+                mean_val = np.mean(simulated_values)
+                var_95 = np.percentile(simulated_values, 5) # 5th Percentile
+                upside_95 = np.percentile(simulated_values, 95)
+                
+                # Scorecards
+                m1, m2, m3 = st.columns(3)
+                m1.metric("Mean Expected Value", f"${mean_val:,.0f}")
+                m2.metric("Value at Risk (5%)", f"${var_95:,.0f}", delta_color="inverse")
+                m3.metric("Upside Potential (95%)", f"${upside_95:,.0f}")
+                
+                # Histogram
+                fig_hist = px.histogram(
+                    simulated_values, 
+                    nbins=75, 
+                    title=f"Distribution of {iterations:,} Valuation Outcomes",
+                    color_discrete_sequence=['#4B0082']
+                )
+                fig_hist.add_vline(x=mean_val, line_dash="dash", line_color="black", annotation_text="Mean")
+                fig_hist.add_vline(x=var_95, line_dash="dot", line_color="red", annotation_text="Risk Floor (5%)")
+                st.plotly_chart(fig_hist, use_container_width=True)
+
+# --------------------------
+# TAB 5: DOCUMENTATION
+# --------------------------
+elif nav == "📘 Methodology":
+    st.title("📘 Valuation Methodology")
+    st.markdown("""
+    ### 1. Discounted Cash Flow (DCF)
+    We utilize a 5-year explicit period forecast followed by a terminal value calculation using the Gordon Growth Method.
+    
+    $$
+    Enterprise Value = \\sum_{t=1}^{5} \\frac{UFCF_t}{(1+WACC)^t} + \\frac{Terminal Value}{(1+WACC)^5}
+    $$
+    
+    ### 2. WACC (Capital Asset Pricing Model)
+    The discount rate is derived using the standard CAPM formula:
+    
+    $$
+    K_e = R_f + \\beta (R_m - R_f)
+    $$
+    
+    *Where $R_f$ is the Risk-Free Rate, $\\beta$ is the levered beta, and $(R_m - R_f)$ is the Market Risk Premium.*
+    
+    ### 3. Monte Carlo Simulation
+    To account for forecasting uncertainty, we apply stochastic shocks to the revenue baseline following a normal distribution:
+    
+    $$
+    EV_{sim} = EV_{base} \\times (1 + \\mathcal{N}(0, \\sigma))
+    $$
+    
+    *Where $\\sigma$ represents the implied volatility of the sector.*
+    """)
