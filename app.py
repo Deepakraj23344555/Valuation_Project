@@ -8,73 +8,79 @@ from io import BytesIO
 # --- 1. CONFIGURATION & STYLING ---
 st.set_page_config(page_title="GT Valuation Analytics", page_icon="💼", layout="wide")
 
-# --- EXECUTIVE THEME CSS (Fixed Visibility) ---
+# --- EXECUTIVE THEME CSS (Dark Brown & Gold) ---
 st.markdown("""
     <style>
-    /* 1. Main Background - Professional Platinum Gray */
+    /* 1. Main Background - Dark Coffee Brown */
     .stApp { 
-        background-color: #F0F2F6; 
+        background-color: #2C241B; 
     }
     
-    /* 2. Sidebar Background - Dark Navy */
+    /* 2. Sidebar Background - Darker Charcoal Brown */
     section[data-testid="stSidebar"] {
-        background-color: #111827; /* Very Dark Navy */
+        background-color: #1E1915; 
     }
     
-    /* 3. Text Visibility Fix - Global */
+    /* 3. Text Visibility Fix - Global (White for Dark Background) */
     h1, h2, h3, h4, h5, h6 {
-        color: #1F2937 !important; /* Dark Charcoal for Headings */
+        color: #E6D5B8 !important; /* Gold/Beige for Headings */
         font-family: 'Helvetica Neue', sans-serif;
     }
     p, div, label, span {
-        color: #374151; /* Standard Gray for body text */
+        color: #F3F4F6; /* Off-White for body text */
     }
     
-    /* 4. Sidebar Text Color - Override to White */
+    /* 4. Sidebar Text Color */
     section[data-testid="stSidebar"] h1, 
     section[data-testid="stSidebar"] h2, 
     section[data-testid="stSidebar"] span, 
     section[data-testid="stSidebar"] label, 
     section[data-testid="stSidebar"] div,
     section[data-testid="stSidebar"] p {
-        color: #F9FAFB !important; /* White/Light Gray */
+        color: #D1C4E9 !important; /* Light Lavender/Gray for contrast */
     }
     
-    /* 5. Metric Cards - High Contrast */
+    /* 5. Metric Cards - Gold Accent */
     div[data-testid="stMetricValue"] { 
         font-size: 28px; 
-        color: #4B0082; /* GT Purple */
+        color: #FFD700; /* Gold */
         font-weight: 700;
     }
     div[data-testid="stMetricLabel"] {
         font-weight: 600;
-        color: #4B5563; /* Dark Gray */
+        color: #E6D5B8; /* Beige */
     }
     
-    /* 6. Professional Buttons */
+    /* 6. Professional Buttons - Gold/Brown Theme */
     .stButton>button {
-        background-color: #4B0082; /* GT Purple */
+        background-color: #8B4513; /* Saddle Brown */
         color: white !important;
         border-radius: 6px;
-        border: none;
+        border: 1px solid #A0522D;
         font-weight: 600;
         padding: 0.5rem 1rem;
         width: 100%;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
     }
     .stButton>button:hover { 
-        background-color: #38006b; 
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        background-color: #A0522D; 
+        box-shadow: 0 4px 8px rgba(0,0,0,0.4);
     }
     
-    /* 7. Containers/Tabs (White Cards on Gray Background) */
+    /* 7. Containers/Tabs (Dark Cards) */
     .stTabs [data-baseweb="tab-list"] { gap: 8px; }
     .stTabs [data-baseweb="tab"] { 
-        background-color: #FFFFFF; 
+        background-color: #3E3226; /* Lighter Brown for Tabs */
         border-radius: 4px 4px 0 0; 
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05); 
         padding: 10px 20px;
-        color: #374151; /* Text inside tabs */
+        color: #E6D5B8; 
+    }
+    
+    /* 8. Fix Dataframes to be readable on dark background */
+    div[data-testid="stDataFrame"] {
+        background-color: #FFFFFF;
+        border-radius: 5px;
+        padding: 10px;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -107,7 +113,7 @@ def calculate_wacc(rf, beta, erp, cost_debt, tax_rate, equity_weight, debt_weigh
 # --- 3. SIDEBAR NAVIGATION ---
 with st.sidebar:
     st.title("💼 Valuation Engine") 
-    st.caption("Grant Thornton | Live Project v1.3")
+    st.caption("Grant Thornton | Live Project v1.4")
     st.markdown("---")
     
     # Navigation Radio Button
@@ -146,7 +152,7 @@ if nav == "🗂️ Data Manager":
             df = pd.read_excel(uploaded_file)
             st.session_state['data'] = df 
             st.success("✅ Data Successfully Ingested")
-            with st.expander("👁️ View Raw Data"):
+            with st.expander("👁️ View Raw Data (Click to Expand)"):
                 st.dataframe(df, use_container_width=True)
 
 # --------------------------
@@ -245,11 +251,18 @@ elif nav == "💎 Intrinsic Valuation":
                 measure = ["relative", "relative", "total"],
                 x = ["PV of Explicit Cash Flows", "PV of Terminal Value", "Enterprise Value"],
                 y = [df['PV_UFCF'].sum(), pv_tv, enterprise_value],
-                connector = {"line":{"color":"rgb(63, 63, 63)"}},
+                connector = {"line":{"color":"#E6D5B8"}}, # Beige Connector
                 textposition = "outside",
                 text = [f"${df['PV_UFCF'].sum():,.0f}", f"${pv_tv:,.0f}", f"${enterprise_value:,.0f}"]
             ))
-            fig.update_layout(title="Enterprise Value Composition", template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+            # Dark Theme for Chart
+            fig.update_layout(
+                title="Enterprise Value Composition", 
+                paper_bgcolor='rgba(0,0,0,0)', 
+                plot_bgcolor='rgba(0,0,0,0)',
+                font=dict(color="#E6D5B8")
+            )
+            fig.update_yaxes(gridcolor='#3E3226')
             st.plotly_chart(fig, use_container_width=True)
             
         with tab2:
@@ -272,8 +285,12 @@ elif nav == "💎 Intrinsic Valuation":
                                 labels=dict(x="Terminal Growth Rate", y="WACC", color="Enterprise Value"),
                                 x=[f"{x:.1%}" for x in tgr_range],
                                 y=[f"{y:.1%}" for y in wacc_range],
-                                text_auto='.2s', aspect="auto", color_continuous_scale='RdYlGn')
-            fig_heat.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                                text_auto='.2s', aspect="auto", color_continuous_scale='YlOrBr') # Yellow-Orange-Brown Scale
+            fig_heat.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)', 
+                plot_bgcolor='rgba(0,0,0,0)',
+                font=dict(color="#E6D5B8")
+            )
             st.plotly_chart(fig_heat, use_container_width=True)
 
 # --------------------------
@@ -299,7 +316,7 @@ elif nav == "⚡ Stress Testing (VaR)":
         if st.button("▶️ Execute Monte Carlo Simulation"):
             with st.spinner(f"Computing {iterations:,} scenarios..."):
                 
-                # Logic: Geometric Brownian Motion Proxy
+                # Logic
                 base_ev = st.session_state['enterprise_value']
                 mu = 0 
                 sigma = volatility
@@ -322,12 +339,18 @@ elif nav == "⚡ Stress Testing (VaR)":
                     simulated_values, 
                     nbins=75, 
                     title=f"Probability Distribution of Valuation Outcomes (N={iterations:,})",
-                    color_discrete_sequence=['#4B0082']
+                    color_discrete_sequence=['#FFD700'] # Gold Bars
                 )
-                fig_hist.add_vline(x=mean_val, line_dash="dash", line_color="black", annotation_text="Mean")
+                fig_hist.add_vline(x=mean_val, line_dash="dash", line_color="white", annotation_text="Mean")
                 fig_hist.add_vline(x=var_95, line_dash="dot", line_color="red", annotation_text="VaR (5%)")
                 
-                fig_hist.update_layout(template="plotly_white", xaxis_title="Enterprise Value ($)", yaxis_title="Frequency", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                fig_hist.update_layout(
+                    template="plotly_dark", 
+                    xaxis_title="Enterprise Value ($)", 
+                    yaxis_title="Frequency", 
+                    paper_bgcolor='rgba(0,0,0,0)', 
+                    plot_bgcolor='rgba(0,0,0,0)'
+                )
                 st.plotly_chart(fig_hist, use_container_width=True)
 
 # --------------------------
