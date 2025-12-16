@@ -6,30 +6,40 @@ import plotly.express as px
 from io import BytesIO
 
 # --- 1. CONFIGURATION & STYLING ---
-st.set_page_config(page_title="GT Valuation Analytics", page_icon="📊", layout="wide")
+st.set_page_config(page_title="GT Valuation Analytics", page_icon="💼", layout="wide")
 
 # Custom CSS for a professional "FinTech" look
 st.markdown("""
     <style>
     /* Main Background */
-    .main { background-color: #f8f9fa; }
+    .main { background-color: #FAFAFA; }
     
     /* Headings */
-    h1, h2, h3 { color: #2c3e50; font-family: 'Segoe UI', sans-serif; }
+    h1, h2, h3 { color: #2C3E50; font-family: 'Helvetica Neue', sans-serif; font-weight: 600; }
     
-    /* Metrics Styling */
-    div[data-testid="stMetricValue"] { font-size: 24px; color: #4B0082; }
+    /* Metrics Styling - Clean & Sharp */
+    div[data-testid="stMetricValue"] { font-size: 26px; color: #4B0082; font-weight: 700;}
     
-    /* Button Styling */
+    /* Sidebar Styling */
+    section[data-testid="stSidebar"] { background-color: #F8F9FA; }
+    
+    /* Button Styling - Flat Design */
     .stButton>button { 
         background-color: #4B0082; 
         color: white; 
-        border-radius: 5px; 
+        border-radius: 4px; 
         border: none;
+        font-weight: 600;
+        padding: 0.5rem 1rem;
     }
     .stButton>button:hover {
         background-color: #38006b;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
     }
+    
+    /* Tab Styling */
+    .stTabs [data-baseweb="tab-list"] { gap: 24px; }
+    .stTabs [data-baseweb="tab"] { height: 50px; white-space: pre-wrap; background-color: white; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
     </style>
     """, unsafe_allow_html=True)
 
@@ -53,67 +63,77 @@ def generate_template():
 
 def calculate_wacc(rf, beta, erp, cost_debt, tax_rate, equity_weight, debt_weight):
     """Calculates WACC using CAPM."""
-    cost_equity = rf + beta * (erp - rf) # CAPM Formula
+    cost_equity = rf + beta * (erp - rf) 
     after_tax_cost_debt = cost_debt * (1 - tax_rate)
     wacc = (cost_equity * equity_weight) + (after_tax_cost_debt * debt_weight)
     return wacc, cost_equity
 
 # --- 3. SIDEBAR NAVIGATION ---
 with st.sidebar:
-    st.title("Valuation Toolkit")
+    st.title("💼 Valuation Engine") # Professional Briefcase Icon
+    st.caption("Grant Thornton | Live Project v1.0")
     st.markdown("---")
-    nav = st.radio("Navigate", ["📂 Data Upload", "🧮 WACC Builder", "📊 DCF Analysis", "🎲 Risk Simulation", "📘 Methodology"])
+    
+    # Using "Abstract" icons looks more like software UI
+    nav = st.radio("Navigation Module", 
+        ["🗂️ Data Manager", 
+         "⚖️ Cost of Capital (WACC)", 
+         "💎 Intrinsic Valuation", 
+         "⚡ Stress Testing (VaR)", 
+         "📝 Assumptions & Logic"])
+    
     st.markdown("---")
-    st.caption("v1.2 | Grant Thornton Live Project")
+    st.info("💡 **Analyst Note:** Ensure all inputs are annual figures in USD Millions.")
 
 # --- 4. MAIN APP LOGIC ---
 
 # --------------------------
-# TAB 1: DATA UPLOAD
+# TAB 1: DATA MANAGER
 # --------------------------
-if nav == "📂 Data Upload":
-    st.title("📂 Data Management")
-    st.markdown("Upload historical financials and projections to initialize the model.")
+if nav == "🗂️ Data Manager":
+    st.title("🗂️ Data Management")
+    st.markdown("Initialize the model by importing client financial data.")
     
     col1, col2 = st.columns(2)
     with col1:
-        st.subheader("Step 1: Get Template")
-        st.write("Use this standardized format for your client data.")
+        st.subheader("1. Template Access")
+        st.write("Standardized template for financial ingestion.")
         template = generate_template()
-        st.download_button("📥 Download Excel Template", data=template, file_name="Client_Data_Template.xlsx")
+        st.download_button("💾 Download Standard Template", data=template, file_name="GT_Client_Template.xlsx")
     
     with col2:
-        st.subheader("Step 2: Upload Data")
-        uploaded_file = st.file_uploader("Upload Populated Excel", type=['xlsx'])
+        st.subheader("2. Data Ingestion")
+        uploaded_file = st.file_uploader("Import Excel File", type=['xlsx'])
         
         if uploaded_file:
             df = pd.read_excel(uploaded_file)
-            st.session_state['data'] = df # Save to session state
-            st.success("✅ Data Loaded Successfully!")
-            st.dataframe(df.head(), use_container_width=True)
+            st.session_state['data'] = df 
+            st.success("✅ Data Successfully Ingested")
+            with st.expander("👁️ View Raw Data"):
+                st.dataframe(df, use_container_width=True)
 
 # --------------------------
 # TAB 2: WACC BUILDER
 # --------------------------
-elif nav == "🧮 WACC Builder":
-    st.title("🧮 Weighted Average Cost of Capital (WACC)")
-    st.markdown("Build your discount rate using the **Capital Asset Pricing Model (CAPM)**.")
+elif nav == "⚖️ Cost of Capital (WACC)":
+    st.title("⚖️ Cost of Capital Builder")
+    st.markdown("Configure the discount rate using the **Capital Asset Pricing Model (CAPM)**.")
     
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.subheader("Equity Assumptions")
-        rf = st.number_input("Risk-Free Rate (%)", 3.0, 10.0, 4.25) / 100
-        beta = st.number_input("Beta (Risk)", 0.5, 3.0, 1.15)
-        erp = st.number_input("Market Return (%)", 5.0, 15.0, 10.0) / 100
+        st.markdown("#### Equity Parameters") # Markdown headers look cleaner
+        rf = st.number_input("Risk-Free Rate (Rf) %", 3.0, 10.0, 4.25) / 100
+        beta = st.number_input("Levered Beta (β)", 0.5, 3.0, 1.15)
+        erp = st.number_input("Market Risk Premium (Rm-Rf) %", 5.0, 15.0, 10.0) / 100
         
     with col2:
-        st.subheader("Debt Assumptions")
-        cost_debt = st.number_input("Pre-Tax Cost of Debt (%)", 2.0, 15.0, 6.5) / 100
-        tax_rate = st.number_input("Corporate Tax Rate (%)", 15.0, 40.0, 25.0) / 100
+        st.markdown("#### Debt Parameters")
+        cost_debt = st.number_input("Pre-Tax Cost of Debt (Kd) %", 2.0, 15.0, 6.5) / 100
+        tax_rate = st.number_input("Marginal Tax Rate (t) %", 15.0, 40.0, 25.0) / 100
         
     with col3:
-        st.subheader("Capital Structure")
+        st.markdown("#### Capital Structure")
         equity_percent = st.slider("Equity %", 0, 100, 75) / 100
         debt_percent = 1 - equity_percent
         st.write(f"**Debt %:** {debt_percent:.0%}")
@@ -127,25 +147,25 @@ elif nav == "🧮 WACC Builder":
     
     st.divider()
     metric1, metric2, metric3 = st.columns(3)
-    metric1.metric("Calculated Cost of Equity", f"{cost_equity:.2%}")
-    metric2.metric("After-Tax Cost of Debt", f"{cost_debt * (1-tax_rate):.2%}")
+    metric1.metric("Cost of Equity (Ke)", f"{cost_equity:.2%}")
+    metric2.metric("Post-Tax Cost of Debt (Kd)", f"{cost_debt * (1-tax_rate):.2%}")
     metric3.metric("👉 Final WACC", f"{calc_wacc:.2%}", delta_color="normal")
 
 # --------------------------
 # TAB 3: DCF ANALYSIS
 # --------------------------
-elif nav == "📊 DCF Analysis":
+elif nav == "💎 Intrinsic Valuation":
     if 'data' not in st.session_state:
-        st.warning("⚠️ Please upload data in the 'Data Upload' tab first.")
+        st.warning("⚠️ Please upload data in the 'Data Manager' module first.")
     else:
-        st.title("📊 Discounted Cash Flow (DCF) Valuation")
+        st.title("💎 Discounted Cash Flow (DCF)")
         
         # Inputs
         df = st.session_state['data'].copy()
         wacc = st.session_state.get('wacc', 0.10) # Default 10% if not calculated
         tax_rate = st.session_state.get('tax_rate', 0.25)
         
-        st.sidebar.markdown("### DCF Controls")
+        st.sidebar.markdown("### 💎 Valuation Controls")
         tgr = st.sidebar.slider("Terminal Growth Rate (%)", 1.0, 5.0, 2.5) / 100
         
         # --- LOGIC ---
@@ -173,10 +193,10 @@ elif nav == "📊 DCF Analysis":
         kpi1, kpi2, kpi3 = st.columns(3)
         kpi1.metric("Implied Enterprise Value", f"${enterprise_value:,.0f}")
         kpi2.metric("PV of Terminal Value", f"${pv_tv:,.0f}", f"{(pv_tv/enterprise_value)*100:.1f}% of Total")
-        kpi3.metric("WACC Used", f"{wacc:.2%}")
+        kpi3.metric("Discount Rate (WACC)", f"{wacc:.2%}")
         
         # Visuals
-        tab1, tab2 = st.tabs(["Waterfall Valuation", "Sensitivity Matrix (Heatmap)"])
+        tab1, tab2 = st.tabs(["Waterfall Breakdown", "Sensitivity Heatmap"])
         
         with tab1:
             fig = go.Figure(go.Waterfall(
@@ -188,7 +208,7 @@ elif nav == "📊 DCF Analysis":
                 textposition = "outside",
                 text = [f"${df['PV_UFCF'].sum():,.0f}", f"${pv_tv:,.0f}", f"${enterprise_value:,.0f}"]
             ))
-            fig.update_layout(title="Enterprise Value Composition")
+            fig.update_layout(title="Enterprise Value Composition", template="plotly_white")
             st.plotly_chart(fig, use_container_width=True)
             
         with tab2:
@@ -217,27 +237,26 @@ elif nav == "📊 DCF Analysis":
 # --------------------------
 # TAB 4: RISK SIMULATION (Updated)
 # --------------------------
-elif nav == "🎲 Risk Simulation":
+elif nav == "⚡ Stress Testing (VaR)":
     if 'enterprise_value' not in st.session_state:
-        st.warning("⚠️ Please run the 'DCF Analysis' tab first to generate a base valuation.")
+        st.warning("⚠️ Please run the 'Intrinsic Valuation' module first.")
     else:
-        st.title("🎲 Monte Carlo Simulation")
+        st.title("⚡ Value at Risk (VaR) Analysis")
         st.markdown("**Objective:** Stress-test the valuation using stochastic modeling.")
         
         col1, col2 = st.columns(2)
         with col1:
-            # Dropdown for iterations
-            iterations = st.selectbox("Number of Iterations (N)", [1000, 5000, 10000, 50000], index=1)
-            st.caption("Higher N = Higher Statistical Convergence")
+            iterations = st.selectbox("Simulation Iterations (N)", [1000, 5000, 10000, 50000], index=1)
+            st.caption("Statistical Significance increases with N.")
         
         with col2:
-            volatility = st.slider("Revenue Volatility (σ)", 5, 40, 15) / 100
-            st.caption("Standard Deviation of asset value")
+            volatility = st.slider("Implied Volatility (σ)", 5, 40, 15) / 100
+            st.caption("Standard Deviation based on historical peer volatility.")
 
         st.divider()
 
-        if st.button("▶️ Run Monte Carlo Simulation"):
-            with st.spinner(f"Running {iterations:,} stochastic scenarios..."):
+        if st.button("▶️ Execute Monte Carlo Simulation"):
+            with st.spinner(f"Computing {iterations:,} scenarios..."):
                 
                 # Logic: Geometric Brownian Motion Proxy
                 base_ev = st.session_state['enterprise_value']
@@ -254,25 +273,27 @@ elif nav == "🎲 Risk Simulation":
                 # Scorecards
                 m1, m2, m3 = st.columns(3)
                 m1.metric("Mean Expected Value", f"${mean_val:,.0f}")
-                m2.metric("Value at Risk (5%)", f"${var_95:,.0f}", delta_color="inverse")
-                m3.metric("Upside Potential (95%)", f"${upside_95:,.0f}")
+                m2.metric("Risk Floor (95% Conf.)", f"${var_95:,.0f}", delta_color="inverse")
+                m3.metric("Upside Ceiling (95% Conf.)", f"${upside_95:,.0f}")
                 
                 # Histogram
                 fig_hist = px.histogram(
                     simulated_values, 
                     nbins=75, 
-                    title=f"Distribution of {iterations:,} Valuation Outcomes",
+                    title=f"Probability Distribution of Valuation Outcomes (N={iterations:,})",
                     color_discrete_sequence=['#4B0082']
                 )
                 fig_hist.add_vline(x=mean_val, line_dash="dash", line_color="black", annotation_text="Mean")
-                fig_hist.add_vline(x=var_95, line_dash="dot", line_color="red", annotation_text="Risk Floor (5%)")
+                fig_hist.add_vline(x=var_95, line_dash="dot", line_color="red", annotation_text="VaR (5%)")
+                
+                fig_hist.update_layout(template="plotly_white", xaxis_title="Enterprise Value ($)", yaxis_title="Frequency")
                 st.plotly_chart(fig_hist, use_container_width=True)
 
 # --------------------------
 # TAB 5: DOCUMENTATION
 # --------------------------
-elif nav == "📘 Methodology":
-    st.title("📘 Valuation Methodology")
+elif nav == "📝 Assumptions & Logic":
+    st.title("📝 Methodology Note")
     st.markdown("""
     ### 1. Discounted Cash Flow (DCF)
     We utilize a 5-year explicit period forecast followed by a terminal value calculation using the Gordon Growth Method.
