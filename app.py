@@ -52,6 +52,7 @@ st.markdown("""
 # --- 2. HELPER FUNCTIONS ---
 
 def generate_template():
+    # Pro Forecast Template Structure
     data = {
         'Year': [2025, 2026, 2027, 2028, 2029],
         'Revenue': [1000, 1100, 1210, 1331, 1464],
@@ -78,7 +79,7 @@ def get_market_data(ticker):
         try:
             rf_rate = treasury.history(period="1d")['Close'].iloc[-1] / 100
         except:
-            rf_rate = 0.045 # Fallback to 4.5% if API fails
+            rf_rate = 0.045 # Fallback
 
         return {
             "beta": info.get('beta', 1.0),
@@ -98,8 +99,7 @@ def get_market_data(ticker):
 
 def fetch_and_project_financials(ticker, years_forecast, growth_rate, margin_target):
     """
-    Fetches real history and projects future based on sliders
-    to create the dataframe structure Tab 3 expects.
+    Quick Forecast Logic: Fetches live data and projects based on sliders.
     """
     try:
         stock = yf.Ticker(ticker)
@@ -131,9 +131,7 @@ def fetch_and_project_financials(ticker, years_forecast, growth_rate, margin_tar
             
             # Simple modeling assumptions for the auto-builder
             # EBITDA Margin defined by user slider
-            # D&A ~ 4% of Rev
-            # CapEx ~ 5% of Rev
-            # NWC ~ 1% of Rev
+            # D&A ~ 4% of Rev, CapEx ~ 5% of Rev, NWC ~ 1% of Rev
             
             d_a = curr_rev * 0.04
             capex = curr_rev * 0.05
@@ -214,20 +212,20 @@ with st.sidebar:
 # --- 4. MAIN APP LOGIC ---
 
 # --------------------------
-# TAB 1: PROJECT SETUP (Modified to include Auto-Generation)
+# TAB 1: PROJECT SETUP (FORECASTING)
 # --------------------------
 if nav == "🗂️ Project Setup":
     st.title("🗂️ Project Initialization")
-    st.markdown("Initialize your model by uploading Excel OR auto-generating forecasts from a Ticker.")
+    st.markdown("Initialize your model. Choose **Quick Forecast** (Auto-Build) or **Pro Forecast** (Excel Upload).")
     
     # Toggle between Upload and Auto-Gen
-    setup_mode = st.radio("Select Data Source:", ["⚡ Auto-Generate from Ticker", "📂 Upload Excel Model"], horizontal=True)
+    setup_mode = st.radio("Select Forecasting Mode:", ["⚡ Quick Forecast (Auto-Generate)", "📂 Pro Forecast (Excel Upload)"], horizontal=True)
 
-    if setup_mode == "📂 Upload Excel Model":
+    if setup_mode == "📂 Pro Forecast (Excel Upload)":
         col1, col2 = st.columns([1, 2])
         with col1:
             st.markdown("### 1. Template")
-            st.write("Required structure for financial inputs.")
+            st.write("Download the template, fill in your detailed projections, and upload.")
             template = generate_template()
             st.download_button("💾 Download Excel Template", data=template, file_name="GT_Model_Template.xlsx")
         
@@ -239,8 +237,8 @@ if nav == "🗂️ Project Setup":
                 st.session_state['data'] = df
                 st.success("✅ Financials Loaded")
 
-    else: # Auto-Generate Mode
-        st.markdown("### ⚡ Live Model Builder")
+    else: # Quick Forecast Mode
+        st.markdown("### ⚡ Quick Forecast Builder")
         c1, c2, c3 = st.columns(3)
         with c1:
             auto_ticker = st.text_input("Ticker Symbol", "AAPL").upper()
@@ -417,7 +415,7 @@ elif nav == "💎 DCF & 3D Sensitivity":
             PV_TV_mesh = TV_mesh / ((1 + X) ** len(df))
             Z = pv_explicit + PV_TV_mesh
             
-            # --- FIX IS HERE: Changed 'Gold' to 'YlOrBr' ---
+            # CORRECTED: Using valid colorscale 'YlOrBr' instead of 'Gold'
             fig_3d = go.Figure(data=[go.Surface(z=Z, x=X*100, y=Y*100, colorscale='YlOrBr')])
             
             fig_3d.update_layout(
@@ -470,6 +468,7 @@ elif nav == "🌍 Comps Regression":
             st.session_state['comps'] = comp_df
             
             # --- SCATTER PLOT WITH REGRESSION ---
+            # NOTE: trendline='ols' requires 'statsmodels' in requirements.txt
             fig_scat = px.scatter(comp_df, x="Revenue", y="EV", text="Ticker", 
                                   trendline="ols", 
                                   title="Market Regression: Size vs. Valuation",
