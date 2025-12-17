@@ -85,9 +85,7 @@ def get_market_data(ticker):
         except:
             rf_rate = 0.045
 
-        # Balance Sheet for Z-Score & EV Bridge
         bs = stock.balance_sheet
-        # Safe extraction with fallbacks
         total_assets = bs.loc['Total Assets'].iloc[0] if 'Total Assets' in bs.index else 0
         total_liab = bs.loc['Total Liabilities Net Minority Interest'].iloc[0] if 'Total Liabilities Net Minority Interest' in bs.index else 0
         retained_earnings = bs.loc['Retained Earnings'].iloc[0] if 'Retained Earnings' in bs.index else 0
@@ -104,7 +102,6 @@ def get_market_data(ticker):
         ebit = inc.loc['EBIT'].iloc[0] if 'EBIT' in inc.index else 0
         revenue = inc.loc['Total Revenue'].iloc[0] if 'Total Revenue' in inc.index else 0
         
-        # Sector check
         sector = info.get('sector', 'Unknown')
 
         return {
@@ -119,7 +116,6 @@ def get_market_data(ticker):
             "currency": info.get('currency', 'USD'),
             "summary": info.get('longBusinessSummary', "No description available."),
             "sector": sector,
-            # Fundamental Data
             "total_assets": total_assets,
             "total_liab": total_liab,
             "retained_earnings": retained_earnings,
@@ -140,44 +136,36 @@ def get_historical_profitability(ticker):
         if fin.empty: return None
         
         df = pd.DataFrame(index=fin.index)
-        
-        # Safe extraction of Total Revenue
         if 'Total Revenue' in fin.columns:
             df['Revenue'] = fin['Total Revenue']
         elif 'Revenue' in fin.columns:
             df['Revenue'] = fin['Revenue']
         else:
-            return None # Cannot calculate margins without revenue
+            return None
 
-        # 1. Gross Margin (Might not exist for Banks)
         if 'Gross Profit' in fin.columns:
             df['Gross_Margin'] = (fin['Gross Profit'] / df['Revenue']) * 100
         else:
-            df['Gross_Margin'] = np.nan # Skip if missing
+            df['Gross_Margin'] = np.nan
 
-        # 2. Operating Margin
         op_col = None
         if 'Operating Income' in fin.columns: op_col = 'Operating Income'
         elif 'EBIT' in fin.columns: op_col = 'EBIT'
-        elif 'Pretax Income' in fin.columns: op_col = 'Pretax Income' # Proxy for banks
+        elif 'Pretax Income' in fin.columns: op_col = 'Pretax Income'
         
         if op_col:
              df['Operating_Margin'] = (fin[op_col] / df['Revenue']) * 100
         else:
              df['Operating_Margin'] = np.nan
 
-        # 3. Net Margin
         if 'Net Income' in fin.columns:
             df['Net_Margin'] = (fin['Net Income'] / df['Revenue']) * 100
         else:
             df['Net_Margin'] = np.nan
         
-        # Clean up
         df.index = pd.to_datetime(df.index)
         df = df.sort_index()
-        # Drop columns that are completely NaN (e.g. Gross Margin for Banks)
         df = df.dropna(axis=1, how='all')
-        
         return df
     except:
         return None
@@ -224,28 +212,113 @@ def calculate_rsi(data, window=14):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
-def create_detailed_report(company_name, mkt_data, ev_dict, wacc, comps_df):
-    ev_mid = ev_dict.get('Base', 0)
-    comps_html = comps_df.to_html(classes='table', index=False) if not comps_df.empty else "<p>No comparable data selected.</p>"
+def create_detailed_report(company_name, mkt_data, ev_dict, wacc, comps_df, base_df):
+    """Generates a professional multi-page HTML report."""
     
+    # 1. Formatters
+    def fmt_curr(x): return f"${x:,.0f}" if isinstance(x, (int, float)) else "N/A"
+    def fmt_pct(x): return f"{x:.2%}" if isinstance(x, (int, float)) else "N/A"
+    
+    ev_mid = ev_dict.get('Base', 0)
+    ev_low = ev_dict.get('Bear', 0)
+    ev_high = ev_dict.get('Bull', 0)
+    
+    # 2. HTML Components
+    comps_html = comps_df.to_html(classes='table', index=False, float_format=lambda x: f"{x:.2f}") if not comps_df.empty else "<p>No comparable data.</p>"
+    
+    # Forecast Table (Base Case)
+    if base_df is not None:
+        # Select key columns and format
+        display_df = base_df[['Year', 'Revenue', 'EBITDA', 'UFCF']].copy()
+        forecast_html = display_df.to_html(classes='table', index=False, float_format=lambda x: f"{x:,.0f}")
+    else:
+        forecast_html = "<p>No forecast data available.</p>"
+
+    # 3. Full Report Template
     html = f"""
     <html>
     <head>
         <style>
-            body {{ font-family: Helvetica, Arial, sans-serif; color: #333; }}
-            .header {{ border-bottom: 4px solid #8B4513; padding-bottom: 10px; margin-bottom: 30px; }}
-            h1 {{ color: #8B4513; }}
-            table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-            th {{ background-color: #8B4513; color: white; padding: 8px; }}
-            td {{ border: 1px solid #ddd; padding: 8px; }}
+            body {{ font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #333; line-height: 1.6; max-width: 900px; margin: 0 auto; }}
+            .page {{ padding: 40px; border: 1px solid #eee; background: white; margin-bottom: 20px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }}
+            .header {{ border-bottom: 4px solid #8B4513; padding-bottom: 10px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end; }}
+            h1 {{ margin: 0; color: #8B4513; font-size: 28px; }}
+            h2 {{ color: #A0522D; border-bottom: 1px solid #eee; margin-top: 30px; }}
+            .meta {{ font-size: 12px; color: #777; }}
+            
+            /* Grid */
+            .grid {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 30px; }}
+            .card {{ background: #f9f9f9; padding: 15px; border-left: 5px solid #8B4513; }}
+            .label {{ font-size: 11px; text-transform: uppercase; color: #666; font-weight: bold; }}
+            .value {{ font-size: 20px; font-weight: bold; color: #222; margin-top: 5px; }}
+            
+            /* Tables */
+            table.table {{ width: 100%; border-collapse: collapse; font-size: 12px; margin: 20px 0; }}
+            table.table th {{ background-color: #8B4513; color: white; padding: 10px; text-align: right; }}
+            table.table td {{ border: 1px solid #ddd; padding: 8px; text-align: right; }}
+            table.table td:first-child {{ text-align: left; font-weight: bold; }}
+            
+            .footer {{ font-size: 10px; color: #999; text-align: center; margin-top: 50px; border-top: 1px solid #eee; padding-top: 10px; }}
         </style>
     </head>
     <body>
-        <div class="header"><h1>Valuation Report: {company_name}</h1></div>
-        <h3>Base Case EV: ${ev_mid:,.0f} | WACC: {wacc:.2%}</h3>
-        <p>{mkt_data.get('summary', '')[:500]}...</p>
-        <h3>Peer Analysis</h3>
-        {comps_html}
+    
+        <div class="page">
+            <div class="header">
+                <div>
+                    <h1>Valuation Report</h1>
+                    <div style="font-size:18px; color:#555;">{company_name}</div>
+                </div>
+                <div class="meta">Date: {datetime.now().strftime('%Y-%m-%d')}</div>
+            </div>
+            
+            <div class="grid">
+                <div class="card">
+                    <div class="label">Base Case EV</div>
+                    <div class="value">{fmt_curr(ev_mid)}</div>
+                </div>
+                <div class="card">
+                    <div class="label">WACC Applied</div>
+                    <div class="value">{fmt_pct(wacc)}</div>
+                </div>
+                <div class="card">
+                    <div class="label">Upside (Bull Case)</div>
+                    <div class="value">{fmt_curr(ev_high)}</div>
+                </div>
+            </div>
+            
+            <h2>Company Profile & Sector</h2>
+            <p><strong>Sector:</strong> {mkt_data.get('sector', 'N/A')}</p>
+            <p>{mkt_data.get('summary', 'No description available.')[:600]}...</p>
+            
+            <h2>Valuation Scenarios</h2>
+            <table class="table">
+                <tr><th>Scenario</th><th>Enterprise Value (Est.)</th></tr>
+                <tr><td style="text-align:left;">🔴 Bear Case</td><td>{fmt_curr(ev_low)}</td></tr>
+                <tr><td style="text-align:left;">🟡 Base Case</td><td>{fmt_curr(ev_mid)}</td></tr>
+                <tr><td style="text-align:left;">🟢 Bull Case</td><td>{fmt_curr(ev_high)}</td></tr>
+            </table>
+            
+            <div class="footer">Generated by GT Valuation Terminal | Confidential</div>
+        </div>
+        
+        <div class="page">
+            <div class="header">
+                <h1>Financial Projections</h1>
+                <div class="meta">{company_name}</div>
+            </div>
+            
+            <h2>5-Year Forecast (Base Case)</h2>
+            <p>The following table outlines the projected Revenue, EBITDA, and Unlevered Free Cash Flow (UFCF) used to derive the intrinsic value.</p>
+            {forecast_html}
+            
+            <h2>Comparable Companies</h2>
+            <p>Market data for key competitors used for relative valuation checks.</p>
+            {comps_html}
+            
+             <div class="footer">Generated by GT Valuation Terminal | Confidential</div>
+        </div>
+
     </body>
     </html>
     """
@@ -255,7 +328,7 @@ def create_detailed_report(company_name, mkt_data, ev_dict, wacc, comps_df):
 with st.sidebar:
     st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Python-logo-notext.svg/242px-Python-logo-notext.svg.png", width=40)
     st.title("GT Terminal")
-    st.caption("Ultimate Edition v9.2 (Fix)")
+    st.caption("Ultimate Edition v9.3")
     st.markdown("---")
     
     nav = st.radio("Navigation", 
@@ -335,6 +408,9 @@ if nav == "🗂️ Project Setup":
                     mkt = get_market_data(auto_ticker)
                     if mkt: st.session_state['ticker_data'] = mkt
                     st.success(f"✅ Models Built for {auto_ticker}")
+                    
+                    # Store Base Case for 3D plot immediately
+                    st.session_state['base_df'] = scenario_dfs['Base']
                 else:
                     st.error("Failed to fetch data.")
 
@@ -385,7 +461,6 @@ elif nav == "📈 Live Market Terminal":
                 m4.metric("P/E", f"{mkt_data['pe_ratio']:.1f}x")
                 m5.metric("Rf Rate", f"{mkt_data['rf_rate']:.2%}")
                 
-                # Technical Analysis
                 st.markdown("### Technical Analysis")
                 hist_df = mkt_data['history'].copy()
                 hist_df['SMA_50'] = hist_df['Close'].rolling(window=50).mean()
@@ -413,7 +488,6 @@ elif nav == "📈 Live Market Terminal":
                                       font=dict(color="#E6D5B8"), yaxis=dict(range=[0,100]))
                 st.plotly_chart(fig_rsi, use_container_width=True)
 
-                # News
                 st.markdown("### 📰 News Sentiment")
                 try:
                     news = yf.Ticker(ticker).news
@@ -482,6 +556,7 @@ elif nav == "💎 DCF & Scenario Analysis":
             ev_val = df_calc['PV'].sum() + pv_tv
             ev_results[name] = ev_val
             
+            # Ensure Base case is saved for 3D plot
             if name == 'Base': st.session_state['base_df'] = df_calc
 
         st.session_state['ev_results'] = ev_results
@@ -523,8 +598,25 @@ elif nav == "💎 DCF & Scenario Analysis":
                 matrix_data.append(row)
             
             df_matrix = pd.DataFrame(matrix_data, index=[f"G: {x:.1%}" for x in tgr_sens], columns=[f"W: {x:.1%}" for x in wacc_sens])
-            # Uses matplotlib for gradient mapping
             st.dataframe(df_matrix.style.format("${:.2f}").background_gradient(cmap='RdYlGn', axis=None))
+            
+            # --- 3D CHART (NOW VISIBLE) ---
+            st.divider()
+            st.markdown("#### 🧊 3D Sensitivity Surface")
+            
+            X, Y = np.meshgrid(wacc_sens, tgr_sens)
+            TV_mesh = (last_cf * (1 + Y)) / (X - Y)
+            PV_TV_mesh = TV_mesh / ((1 + X) ** len(base_df_sens))
+            Z = pv_explicit + PV_TV_mesh
+            
+            fig_3d = go.Figure(data=[go.Surface(z=Z, x=X*100, y=Y*100, colorscale='YlOrBr')])
+            fig_3d.update_layout(
+                scene=dict(xaxis_title='WACC (%)', yaxis_title='Growth (%)', zaxis_title='EV ($)'),
+                paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#E6D5B8"), height=600
+            )
+            st.plotly_chart(fig_3d, use_container_width=True)
+        else:
+            st.warning("Base case data missing. Please rebuild model in Tab 1.")
 
 # --------------------------
 # TAB 4: COMPS
@@ -535,7 +627,6 @@ elif nav == "🌍 Comps Regression":
     if st.button("🔄 Analyze Peers"):
         tickers = [x.strip() for x in comps_input.split(',')]
         data_points = []
-        
         with st.spinner("Fetching Peer Data..."):
             for t in tickers:
                 try:
@@ -594,7 +685,9 @@ elif nav == "⚡ Risk & Reporting":
                 mkt_d = st.session_state.get('ticker_data', {})
                 wacc_u = st.session_state.get('wacc', 0)
                 comps_d = st.session_state.get('comps', pd.DataFrame())
-                html = create_detailed_report(ticker_n, mkt_d, ev_results, wacc_u, comps_d)
+                base_d = st.session_state.get('base_df')
+                
+                html = create_detailed_report(ticker_n, mkt_d, ev_results, wacc_u, comps_d, base_d)
                 b64 = base64.b64encode(html.encode()).decode()
                 href = f'<a href="data:text/html;base64,{b64}" download="{ticker_n}_Valuation_Report.html"><button style="padding:10px;">📥 Download</button></a>'
                 st.markdown(href, unsafe_allow_html=True)
@@ -616,14 +709,10 @@ elif nav == "🏥 Financial Health (Z-Score)":
             if ta > 0:
                 z = (1.2*(wc/ta)) + (1.4*(re/ta)) + (3.3*(ebit/ta)) + (0.6*(mkt_cap/tl)) + (1.0*(rev/ta))
                 
-                # Dynamic Explanation Logic
                 st.subheader(f"Altman Z-Score: {z:.2f}")
-                
-                # Check for "Bank/Financial" sector Warning
                 if 'Financial' in sector or 'Bank' in d['name']:
-                    st.warning("⚠️ **Sector Warning:** This company appears to be in the Financial/Banking sector. The standard Altman Z-Score often produces false 'Distress' signals for banks because of their unique balance sheet structure (high liabilities/deposits).")
+                    st.warning("⚠️ **Sector Warning:** This company appears to be in the Financial/Banking sector. The standard Altman Z-Score often produces false 'Distress' signals for banks.")
 
-                # Gauge Chart
                 fig_gauge = go.Figure(go.Indicator(
                     mode="gauge+number", value=z, title={'text': "Bankruptcy Risk"},
                     gauge={'axis': {'range': [0, 5]}, 'bar': {'color': "black"},
@@ -633,26 +722,18 @@ elif nav == "🏥 Financial Health (Z-Score)":
                 fig_gauge.update_layout(paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#E6D5B8"))
                 st.plotly_chart(fig_gauge, use_container_width=True)
                 
-                # Interpretation & Advice
                 c1, c2 = st.columns(2)
-                
                 with c1:
                     st.markdown("#### 📝 Score Interpretation")
-                    if z > 3.0:
-                        st.success("**Zone: Safe (> 3.0)**\nThe company shows strong financial health with low risk of bankruptcy in the near term.")
-                    elif z > 1.8:
-                        st.warning("**Zone: Grey (1.8 - 3.0)**\nThe company is in the caution zone. Financials are stable but requires monitoring of debt levels.")
-                    else:
-                        st.error("**Zone: Distress (< 1.8)**\nHigh financial risk. This score suggests potential insolvency issues unless the company is a Bank/Financial institution (see warning above).")
+                    if z > 3.0: st.success("**Zone: Safe (> 3.0)**\nLow risk of bankruptcy.")
+                    elif z > 1.8: st.warning("**Zone: Grey (1.8 - 3.0)**\nModerate risk.")
+                    else: st.error("**Zone: Distress (< 1.8)**\nHigh financial risk.")
                 
                 with c2:
                     st.markdown("#### 💡 Investor Suggestions")
-                    if z > 3.0:
-                        st.info("✅ **Strategy:** Long-term Hold / Buy.\n* Good candidate for core portfolio.\n* Focus on valuation (is it cheap?) rather than survival risk.")
-                    elif z > 1.8:
-                        st.info("⚠️ **Strategy:** Monitor / Hedge.\n* Check recent earnings for deteriorating margins.\n* Avoid heavy allocation until score improves.")
-                    else:
-                        st.info("🛑 **Strategy:** High Risk / Speculative.\n* If holding: Re-evaluate thesis immediately.\n* If buying: Only suitable for deep-value turnaround plays.")
+                    if z > 3.0: st.info("✅ **Strategy:** Long-term Hold / Buy.")
+                    elif z > 1.8: st.info("⚠️ **Strategy:** Monitor / Hedge.")
+                    else: st.info("🛑 **Strategy:** High Risk / Speculative.")
 
             else: st.error("Data missing for Z-Score.")
         except: st.error("Calculation Error.")
@@ -662,7 +743,6 @@ elif nav == "🏥 Financial Health (Z-Score)":
 # --------------------------
 elif nav == "📊 Deep Dive":
     st.title("📊 Fundamental Deep Dive")
-    
     ticker_to_use = st.session_state.get('ticker_symbol', st.session_state.get('ticker_name'))
     
     if not ticker_to_use:
@@ -673,16 +753,12 @@ elif nav == "📊 Deep Dive":
         
         with st.spinner(f"Fetching historical margins for {ticker_to_use}..."):
             df_margins = get_historical_profitability(ticker_to_use)
-            
             if df_margins is not None and not df_margins.empty:
-                # Plot
                 fig_marg = px.line(df_margins, x=df_margins.index, y=df_margins.columns,
                                    title="Margin Trends", markers=True)
                 fig_marg.update_layout(paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#E6D5B8"), 
                                        yaxis_title="Margin (%)", xaxis_title="Year")
                 st.plotly_chart(fig_marg, use_container_width=True)
-                
-                # Table
                 st.dataframe(df_margins.style.format("{:.2f}%"))
             else:
-                st.error("Could not fetch historical financial data. (Note: Banks may lack 'Gross Margin' data in standard feeds)")
+                st.error("Could not fetch historical financial data. (Note: Banks may lack 'Gross Margin' data)")
