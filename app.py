@@ -52,7 +52,6 @@ st.markdown("""
 # --- 2. HELPER FUNCTIONS ---
 
 def generate_template():
-    # Pro Forecast Template Structure
     data = {
         'Year': [2025, 2026, 2027, 2028, 2029],
         'Revenue': [1000, 1100, 1210, 1331, 1464],
@@ -73,13 +72,10 @@ def get_market_data(ticker):
         stock = yf.Ticker(ticker)
         info = stock.info
         hist = stock.history(period="1y") 
-        
-        # Get Risk Free Rate
-        treasury = yf.Ticker("^TNX") 
         try:
-            rf_rate = treasury.history(period="1d")['Close'].iloc[-1] / 100
+            rf_rate = yf.Ticker("^TNX").history(period="1d")['Close'].iloc[-1] / 100
         except:
-            rf_rate = 0.045 # Fallback
+            rf_rate = 0.045 
 
         return {
             "beta": info.get('beta', 1.0),
@@ -92,101 +88,164 @@ def get_market_data(ticker):
             "rf_rate": rf_rate,
             "name": info.get('longName', ticker),
             "history": hist,
-            "currency": info.get('currency', 'USD')
+            "currency": info.get('currency', 'USD'),
+            "summary": info.get('longBusinessSummary', "No description available.")
         }
     except:
         return None
 
 def fetch_and_project_financials(ticker, years_forecast, growth_rate, margin_target):
-    """
-    Quick Forecast Logic: Fetches live data and projects based on sliders.
-    """
     try:
         stock = yf.Ticker(ticker)
         fin = stock.financials.T
-        
         if fin.empty: return None
-
-        # 1. Get Last Historical Year Data
-        last_row = fin.iloc[0] # yfinance puts newest at top (index 0)
-        
-        # Extract base metrics
-        try:
-            base_rev = last_row['Total Revenue']
-        except:
-            base_rev = last_row.get('Revenue', 1000)
-            
+        last_row = fin.iloc[0]
+        try: base_rev = last_row['Total Revenue']
+        except: base_rev = last_row.get('Revenue', 1000)
         current_year = datetime.now().year
-        
-        # 2. Generate Projections
         projected_data = []
-        
         curr_rev = base_rev
-        
         for i in range(1, years_forecast + 1):
-            year_idx = current_year + i
-            
-            # Growth Logic
             curr_rev = curr_rev * (1 + growth_rate)
-            
-            # Simple modeling assumptions for the auto-builder
-            # EBITDA Margin defined by user slider
-            # D&A ~ 4% of Rev, CapEx ~ 5% of Rev, NWC ~ 1% of Rev
-            
-            d_a = curr_rev * 0.04
-            capex = curr_rev * 0.05
-            nwc_change = curr_rev * 0.01
-            
             projected_data.append({
-                'Year': year_idx,
+                'Year': current_year + i,
                 'Revenue': curr_rev,
                 'EBITDA_Margin': margin_target, 
-                'D_and_A': d_a,
-                'CapEx': capex,
-                'Change_in_NWC': nwc_change
+                'D_and_A': curr_rev * 0.04,
+                'CapEx': curr_rev * 0.05,
+                'Change_in_NWC': curr_rev * 0.01
             })
-            
         return pd.DataFrame(projected_data)
-        
     except Exception as e:
         st.error(f"Projection Error: {e}")
         return None
 
-def create_html_report(company_name, ev, wacc, upside, peers_data):
+def create_detailed_report(company_name, mkt_data, df_forecast, ev, wacc, tgr, upside, comps_df):
+    """
+    Generates a Multi-Page HTML Report.
+    """
+    # 1. Formatting Helpers
+    def fmt_curr(x): return f"${x:,.0f}" if isinstance(x, (int, float)) else x
+    def fmt_pct(x): return f"{x:.2%}" if isinstance(x, (int, float)) else x
+    
+    # 2. Convert Dataframes to HTML
+    forecast_html = df_forecast.to_html(classes='table', index=False, float_format=lambda x: f"{x:,.0f}" if x > 1 else f"{x:.2%}")
+    comps_html = comps_df.to_html(classes='table', index=False) if not comps_df.empty else "<p>No comparable data selected.</p>"
+    
+    # 3. HTML Structure
     html = f"""
     <html>
     <head>
         <style>
-            body {{ font-family: 'Helvetica', sans-serif; color: #333; }}
-            .header {{ background-color: #2C241B; color: #FFD700; padding: 25px; text-align: center; border-bottom: 5px solid #8B4513; }}
-            h1 {{ margin: 0; font-size: 28px; }}
-            .metric-box {{ background-color: #f8f9fa; border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 5px; }}
-            .metric-val {{ font-size: 24px; font-weight: bold; color: #8B4513; }}
-            table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-            th {{ background-color: #8B4513; color: white; padding: 10px; text-align: left; }}
-            td {{ border: 1px solid #ddd; padding: 10px; }}
-            tr:nth-child(even) {{ background-color: #f2f2f2; }}
+            body {{ font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #333; line-height: 1.6; }}
+            .container {{ width: 800px; margin: 0 auto; }}
+            
+            /* Colors */
+            .primary {{ color: #8B4513; }}
+            .secondary {{ color: #A0522D; }}
+            .accent {{ color: #B8860B; }}
+            
+            /* Structure */
+            .page {{ page-break-after: always; min-height: 900px; padding: 40px; border: 1px solid #eee; background: white; margin-bottom: 20px; }}
+            .header {{ border-bottom: 4px solid #8B4513; padding-bottom: 10px; margin-bottom: 30px; }}
+            .header h1 {{ margin: 0; font-size: 32px; text-transform: uppercase; }}
+            .header .meta {{ color: #666; font-size: 14px; }}
+            
+            /* Tables */
+            table.table {{ width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 12px; }}
+            table.table th {{ background-color: #8B4513; color: white; padding: 8px; text-align: right; }}
+            table.table td {{ border: 1px solid #ddd; padding: 8px; text-align: right; }}
+            table.table td:first-child {{ text-align: left; font-weight: bold; }}
+            
+            /* Metrics Grid */
+            .grid {{ display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 30px; }}
+            .card {{ background: #f8f9fa; padding: 15px; border-left: 5px solid #8B4513; }}
+            .card .label {{ font-size: 12px; text-transform: uppercase; color: #666; }}
+            .card .value {{ font-size: 24px; font-weight: bold; color: #333; }}
+            
+            h2 {{ color: #8B4513; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-top: 30px; }}
+            .footer {{ font-size: 10px; color: #999; text-align: center; margin-top: 50px; border-top: 1px solid #eee; padding-top: 10px; }}
         </style>
     </head>
     <body>
-        <div class="header">
-            <h1>VALUATION SUMMARY: {company_name.upper()}</h1>
-            <p>Grant Thornton Live Project | Date: {datetime.now().strftime('%Y-%m-%d')}</p>
+        <div class="container">
+        
+            <div class="page">
+                <div class="header">
+                    <h1>Valuation Report: {company_name}</h1>
+                    <div class="meta">Generated by GT Valuation Terminal | {datetime.now().strftime('%B %d, %Y')}</div>
+                </div>
+                
+                <div class="grid">
+                    <div class="card">
+                        <div class="label">Enterprise Value (DCF)</div>
+                        <div class="value">{fmt_curr(ev)}</div>
+                    </div>
+                    <div class="card">
+                        <div class="label">WACC Applied</div>
+                        <div class="value">{fmt_pct(wacc)}</div>
+                    </div>
+                    <div class="card">
+                        <div class="label">Upside Case (95%)</div>
+                        <div class="value">{fmt_curr(upside)}</div>
+                    </div>
+                </div>
+                
+                <h2>Company Profile</h2>
+                <p><strong>Sector:</strong> Technology / General</p>
+                <p>{mkt_data.get('summary', 'Company description not available.')[:500]}...</p>
+                
+                <h2>Market Snapshot</h2>
+                <table class="table">
+                    <tr><th>Metric</th><th>Value</th></tr>
+                    <tr><td>Current Market Cap</td><td>{fmt_curr(mkt_data.get('mkt_cap', 0))}</td></tr>
+                    <tr><td>Current Price</td><td>{fmt_curr(mkt_data.get('price', 0))}</td></tr>
+                    <tr><td>52 Week High</td><td>{fmt_curr(mkt_data.get('high_52', 0))}</td></tr>
+                    <tr><td>Risk Free Rate</td><td>{fmt_pct(mkt_data.get('rf_rate', 0))}</td></tr>
+                </table>
+                
+                <div class="footer">CONFIDENTIAL - INTERNAL USE ONLY</div>
+            </div>
+            
+            <div class="page">
+                <div class="header">
+                    <h1>Financial Forecast</h1>
+                </div>
+                
+                <h2>Projected Performance (5 Years)</h2>
+                <p>The following table outlines the pro-forma financial statement projected for the valuation period.</p>
+                {forecast_html}
+                
+                <h2>Assumptions</h2>
+                <ul>
+                    <li><strong>Terminal Growth Rate:</strong> {fmt_pct(tgr)}</li>
+                    <li><strong>Discount Rate (WACC):</strong> {fmt_pct(wacc)}</li>
+                    <li><strong>Forecast Period:</strong> 5 Years</li>
+                </ul>
+                 <div class="footer">CONFIDENTIAL - INTERNAL USE ONLY</div>
+            </div>
+
+            <div class="page">
+                <div class="header">
+                    <h1>Valuation Details</h1>
+                </div>
+                
+                <h2>DCF Methodology</h2>
+                <p>The intrinsic value was derived using a standard Discounted Cash Flow (DCF) approach. Free Cash Flows (FCF) were projected for 5 years and discounted back to present value using the calculated WACC.</p>
+                
+                <div class="card" style="margin-top: 20px;">
+                    <div class="label">Implied Enterprise Value</div>
+                    <div class="value">{fmt_curr(ev)}</div>
+                </div>
+
+                <h2>Comparable Companies Analysis</h2>
+                <p>Relative valuation based on selected peer group multiples.</p>
+                {comps_html}
+                
+                <div class="footer">CONFIDENTIAL - INTERNAL USE ONLY</div>
+            </div>
+            
         </div>
-        
-        <h3>1. Intrinsic Valuation (DCF Output)</h3>
-        <div class="metric-box">
-            Implied Enterprise Value: <span class="metric-val">${ev:,.0f}</span><br>
-            WACC Applied: <span class="metric-val">{wacc:.2%}</span><br>
-            Upside Potential (95% Conf.): <span class="metric-val">${upside:,.0f}</span>
-        </div>
-        
-        <h3>2. Market Comparables</h3>
-        {peers_data.to_html(index=False)}
-        
-        <br><br>
-        <hr>
-        <small>Generated via GT Valuation Terminal. Confidential.</small>
     </body>
     </html>
     """
@@ -196,7 +255,7 @@ def create_html_report(company_name, ev, wacc, upside, peers_data):
 with st.sidebar:
     st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Python-logo-notext.svg/242px-Python-logo-notext.svg.png", width=40)
     st.title("GT Terminal")
-    st.caption("Professional Edition v3.0")
+    st.caption("Professional Edition v4.0")
     st.markdown("---")
     
     nav = st.radio("Navigation", 
@@ -253,7 +312,11 @@ if nav == "🗂️ Project Setup":
                 
                 if df is not None:
                     st.session_state['data'] = df
-                    st.session_state['ticker_name'] = auto_ticker # Save for report
+                    st.session_state['ticker_name'] = auto_ticker 
+                    # Fetch market data immediately for the report
+                    mkt = get_market_data(auto_ticker)
+                    if mkt: st.session_state['ticker_data'] = mkt
+                    
                     st.success(f"✅ Model Built for {auto_ticker}")
                 else:
                     st.error("Failed to fetch data.")
@@ -290,6 +353,7 @@ elif nav == "📈 Live Market Terminal":
             
             if mkt_data:
                 st.session_state['ticker_data'] = mkt_data # Save for WACC
+                st.session_state['ticker_name'] = mkt_data['name']
                 
                 # --- A. HEADER METRICS ---
                 m1, m2, m3, m4, m5 = st.columns(5)
@@ -341,7 +405,6 @@ elif nav == "📈 Live Market Terminal":
                     
                     st.session_state['wacc'] = wacc
                     st.session_state['tax_rate'] = tax_rate
-                    st.session_state['ticker_name'] = mkt_data['name']
                     
                     st.metric("✅ Calculated WACC", f"{wacc:.2%}", delta="Used in Valuation")
 
@@ -362,6 +425,7 @@ elif nav == "💎 DCF & 3D Sensitivity":
         wacc = st.session_state.get('wacc', 0.10)
         tax = st.session_state.get('tax_rate', 0.25)
         tgr = st.slider("Terminal Growth Rate (%)", 1.0, 5.0, 2.5, step=0.1) / 100
+        st.session_state['tgr'] = tgr
         
         # --- DCF CORE ENGINE ---
         if 'EBITDA' not in df.columns:
@@ -415,7 +479,6 @@ elif nav == "💎 DCF & 3D Sensitivity":
             PV_TV_mesh = TV_mesh / ((1 + X) ** len(df))
             Z = pv_explicit + PV_TV_mesh
             
-            # CORRECTED: Using valid colorscale 'YlOrBr' instead of 'Gold'
             fig_3d = go.Figure(data=[go.Surface(z=Z, x=X*100, y=Y*100, colorscale='YlOrBr')])
             
             fig_3d.update_layout(
@@ -468,7 +531,6 @@ elif nav == "🌍 Comps Regression":
             st.session_state['comps'] = comp_df
             
             # --- SCATTER PLOT WITH REGRESSION ---
-            # NOTE: trendline='ols' requires 'statsmodels' in requirements.txt
             fig_scat = px.scatter(comp_df, x="Revenue", y="EV", text="Ticker", 
                                   trendline="ols", 
                                   title="Market Regression: Size vs. Valuation",
@@ -528,17 +590,25 @@ elif nav == "⚡ Risk & Reporting":
         
         with c2:
             st.markdown("#### Client Deliverable")
-            st.info("Generates a One-Pager Summary for the Investment Committee.")
+            st.info("Generates a Detailed Multi-Page Report.")
             
-            if st.button("🖨️ Generate HTML Tear Sheet"):
-                ticker_n = st.session_state.get('ticker_name', 'Project Alpha')
-                wacc_u = st.session_state.get('wacc', 0)
-                upside_u = st.session_state.get('upside', 0)
+            if st.button("🖨️ Generate Detailed PDF Report"):
+                ticker_n = st.session_state.get('ticker_name', 'Company')
+                
+                # Gather all data for the report
+                mkt_d = st.session_state.get('ticker_data', {})
+                df_f = st.session_state.get('data', pd.DataFrame())
+                ev_val = st.session_state.get('ev', 0)
+                wacc_val = st.session_state.get('wacc', 0)
+                tgr_val = st.session_state.get('tgr', 0.025)
+                upside_val = st.session_state.get('upside', ev_val * 1.2) # Default assumption if simulation not run
                 comps_d = st.session_state.get('comps', pd.DataFrame())
                 
-                html = create_html_report(ticker_n, st.session_state['ev'], wacc_u, upside_u, comps_d)
+                # Generate HTML
+                html = create_detailed_report(ticker_n, mkt_d, df_f, ev_val, wacc_val, tgr_val, upside_val, comps_d)
+                
                 b64 = base64.b64encode(html.encode()).decode()
-                href = f'<a href="data:text/html;base64,{b64}" download="{ticker_n}_Valuation.html" style="text-decoration:none;">' \
+                href = f'<a href="data:text/html;base64,{b64}" download="{ticker_n}_Valuation_Report.html" style="text-decoration:none;">' \
                        f'<button style="background-color:#FFD700; color:#2C241B; border:none; padding:10px 20px; font-weight:bold; border-radius:5px; cursor:pointer;">' \
-                       f'📥 DOWNLOAD REPORT</button></a>'
+                       f'📥 DOWNLOAD DETAILED REPORT</button></a>'
                 st.markdown(href, unsafe_allow_html=True)
