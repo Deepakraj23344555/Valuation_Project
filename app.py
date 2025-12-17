@@ -366,7 +366,6 @@ elif nav == "💎 DCF & 3D Sensitivity":
         tgr = st.slider("Terminal Growth Rate (%)", 1.0, 5.0, 2.5, step=0.1) / 100
         
         # --- DCF CORE ENGINE ---
-        # Handle cases where EBITDA might be calculated or explicit
         if 'EBITDA' not in df.columns:
             df['EBITDA'] = df['Revenue'] * df['EBITDA_Margin']
             
@@ -418,7 +417,9 @@ elif nav == "💎 DCF & 3D Sensitivity":
             PV_TV_mesh = TV_mesh / ((1 + X) ** len(df))
             Z = pv_explicit + PV_TV_mesh
             
-            fig_3d = go.Figure(data=[go.Surface(z=Z, x=X*100, y=Y*100, colorscale='Gold')])
+            # --- FIX IS HERE: Changed 'Gold' to 'YlOrBr' ---
+            fig_3d = go.Figure(data=[go.Surface(z=Z, x=X*100, y=Y*100, colorscale='YlOrBr')])
+            
             fig_3d.update_layout(
                 title="EV Sensitivity to WACC & Growth",
                 scene = dict(
