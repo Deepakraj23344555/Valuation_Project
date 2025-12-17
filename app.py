@@ -71,12 +71,15 @@ def get_market_data(ticker):
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
-        hist = stock.history(period="1y") # Get 1 Year Price History
+        hist = stock.history(period="1y") 
         
         # Get Risk Free Rate
         treasury = yf.Ticker("^TNX") 
-        rf_rate = treasury.history(period="1d")['Close'].iloc[-1] / 100
-        
+        try:
+            rf_rate = treasury.history(period="1d")['Close'].iloc[-1] / 100
+        except:
+            rf_rate = 0.045 # Fallback to 4.5% if API fails
+
         return {
             "beta": info.get('beta', 1.0),
             "price": info.get('currentPrice', 0),
@@ -91,6 +94,64 @@ def get_market_data(ticker):
             "currency": info.get('currency', 'USD')
         }
     except:
+        return None
+
+def fetch_and_project_financials(ticker, years_forecast, growth_rate, margin_target):
+    """
+    Fetches real history and projects future based on sliders
+    to create the dataframe structure Tab 3 expects.
+    """
+    try:
+        stock = yf.Ticker(ticker)
+        fin = stock.financials.T
+        
+        if fin.empty: return None
+
+        # 1. Get Last Historical Year Data
+        last_row = fin.iloc[0] # yfinance puts newest at top (index 0)
+        
+        # Extract base metrics
+        try:
+            base_rev = last_row['Total Revenue']
+        except:
+            base_rev = last_row.get('Revenue', 1000)
+            
+        current_year = datetime.now().year
+        
+        # 2. Generate Projections
+        projected_data = []
+        
+        curr_rev = base_rev
+        
+        for i in range(1, years_forecast + 1):
+            year_idx = current_year + i
+            
+            # Growth Logic
+            curr_rev = curr_rev * (1 + growth_rate)
+            
+            # Simple modeling assumptions for the auto-builder
+            # EBITDA Margin defined by user slider
+            # D&A ~ 4% of Rev
+            # CapEx ~ 5% of Rev
+            # NWC ~ 1% of Rev
+            
+            d_a = curr_rev * 0.04
+            capex = curr_rev * 0.05
+            nwc_change = curr_rev * 0.01
+            
+            projected_data.append({
+                'Year': year_idx,
+                'Revenue': curr_rev,
+                'EBITDA_Margin': margin_target, 
+                'D_and_A': d_a,
+                'CapEx': capex,
+                'Change_in_NWC': nwc_change
+            })
+            
+        return pd.DataFrame(projected_data)
+        
+    except Exception as e:
+        st.error(f"Projection Error: {e}")
         return None
 
 def create_html_report(company_name, ev, wacc, upside, peers_data):
@@ -153,32 +214,67 @@ with st.sidebar:
 # --- 4. MAIN APP LOGIC ---
 
 # --------------------------
-# TAB 1: PROJECT SETUP
+# TAB 1: PROJECT SETUP (Modified to include Auto-Generation)
 # --------------------------
 if nav == "🗂️ Project Setup":
     st.title("🗂️ Project Initialization")
-    st.markdown("Load your financial model to begin the valuation workflow.")
+    st.markdown("Initialize your model by uploading Excel OR auto-generating forecasts from a Ticker.")
     
-    col1, col2 = st.columns([1, 2])
-    with col1:
-        st.markdown("### 1. Template")
-        st.write("Required structure for financial inputs.")
-        template = generate_template()
-        st.download_button("💾 Download Excel Template", data=template, file_name="GT_Model_Template.xlsx")
-    
-    with col2:
-        st.markdown("### 2. Data Upload")
-        uploaded_file = st.file_uploader("Import Financial Model", type=['xlsx'])
-        if uploaded_file:
-            df = pd.read_excel(uploaded_file)
-            st.session_state['data'] = df
+    # Toggle between Upload and Auto-Gen
+    setup_mode = st.radio("Select Data Source:", ["⚡ Auto-Generate from Ticker", "📂 Upload Excel Model"], horizontal=True)
+
+    if setup_mode == "📂 Upload Excel Model":
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            st.markdown("### 1. Template")
+            st.write("Required structure for financial inputs.")
+            template = generate_template()
+            st.download_button("💾 Download Excel Template", data=template, file_name="GT_Model_Template.xlsx")
+        
+        with col2:
+            st.markdown("### 2. Data Upload")
+            uploaded_file = st.file_uploader("Import Financial Model", type=['xlsx'])
+            if uploaded_file:
+                df = pd.read_excel(uploaded_file)
+                st.session_state['data'] = df
+                st.success("✅ Financials Loaded")
+
+    else: # Auto-Generate Mode
+        st.markdown("### ⚡ Live Model Builder")
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            auto_ticker = st.text_input("Ticker Symbol", "AAPL").upper()
+        with c2:
+            est_growth = st.slider("Est. Revenue Growth (%)", 0, 50, 10) / 100
+        with c3:
+            est_margin = st.slider("Target EBITDA Margin (%)", 5, 60, 30) / 100
             
-            # Show a nice preview chart immediately
-            st.success("✅ Financials Loaded")
-            fig_prev = px.bar(df, x='Year', y=['Revenue', 'EBITDA', 'CapEx'], barmode='group', 
-                              title="Historical & Projected Financials", color_discrete_sequence=['#FFD700', '#8B4513', '#A0522D'])
-            fig_prev.update_layout(paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#E6D5B8"))
-            st.plotly_chart(fig_prev, use_container_width=True)
+        if st.button("🚀 Build Forecast Model"):
+            with st.spinner("Fetching historicals and projecting future..."):
+                df = fetch_and_project_financials(auto_ticker, 5, est_growth, est_margin)
+                
+                if df is not None:
+                    st.session_state['data'] = df
+                    st.session_state['ticker_name'] = auto_ticker # Save for report
+                    st.success(f"✅ Model Built for {auto_ticker}")
+                else:
+                    st.error("Failed to fetch data.")
+
+    # Show Data Preview if Loaded
+    if 'data' in st.session_state:
+        df = st.session_state['data']
+        st.markdown("---")
+        st.markdown("### Model Preview")
+        
+        # Calculate Implied EBITDA for the preview chart if not explicit column
+        plot_df = df.copy()
+        if 'EBITDA' not in plot_df.columns and 'EBITDA_Margin' in plot_df.columns:
+            plot_df['EBITDA'] = plot_df['Revenue'] * plot_df['EBITDA_Margin']
+            
+        fig_prev = px.bar(plot_df, x='Year', y=['Revenue', 'EBITDA', 'CapEx'], barmode='group', 
+                          title="Financial Projections", color_discrete_sequence=['#FFD700', '#8B4513', '#A0522D'])
+        fig_prev.update_layout(paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#E6D5B8"))
+        st.plotly_chart(fig_prev, use_container_width=True)
 
 # --------------------------
 # TAB 2: LIVE MARKET TERMINAL
@@ -259,7 +355,7 @@ elif nav == "📈 Live Market Terminal":
 # --------------------------
 elif nav == "💎 DCF & 3D Sensitivity":
     if 'data' not in st.session_state:
-        st.warning("⚠️ Please upload data in 'Project Setup' first.")
+        st.warning("⚠️ Please initialize model in 'Project Setup' first (Upload Excel or Auto-Generate).")
     else:
         st.title("💎 Intrinsic Valuation")
         
@@ -270,7 +366,10 @@ elif nav == "💎 DCF & 3D Sensitivity":
         tgr = st.slider("Terminal Growth Rate (%)", 1.0, 5.0, 2.5, step=0.1) / 100
         
         # --- DCF CORE ENGINE ---
-        df['EBITDA'] = df['Revenue'] * df['EBITDA_Margin']
+        # Handle cases where EBITDA might be calculated or explicit
+        if 'EBITDA' not in df.columns:
+            df['EBITDA'] = df['Revenue'] * df['EBITDA_Margin']
+            
         df['NOPAT'] = (df['EBITDA'] - df['D_and_A']) * (1 - tax)
         df['UFCF'] = df['NOPAT'] + df['D_and_A'] - df['CapEx'] - df['Change_in_NWC']
         
@@ -313,8 +412,6 @@ elif nav == "💎 DCF & 3D Sensitivity":
             
             # Vectorized calculation for surface
             last_cf = df['UFCF'].iloc[-1]
-            # Z = EV for each pair of (WACC, TGR)
-            # Simplified PV of Explicit part (constant for graph speed approx, or recalculate full)
             pv_explicit = df['PV'].sum() 
             # Recalculate PV_TV for each point
             TV_mesh = (last_cf * (1 + Y)) / (X - Y)
@@ -373,7 +470,7 @@ elif nav == "🌍 Comps Regression":
             
             # --- SCATTER PLOT WITH REGRESSION ---
             fig_scat = px.scatter(comp_df, x="Revenue", y="EV", text="Ticker", 
-                                  trendline="ols", # Ordinary Least Squares Regression
+                                  trendline="ols", 
                                   title="Market Regression: Size vs. Valuation",
                                   color_discrete_sequence=['#FFD700'])
             
@@ -412,7 +509,7 @@ elif nav == "⚡ Risk & Reporting":
                 base_ev = st.session_state['ev']
                 sims = base_ev * (1 + np.random.normal(0, vol, iterations))
                 
-                # Convergence Plot (New Feature)
+                # Convergence Plot
                 running_mean = [np.mean(sims[:i]) for i in range(1, len(sims), 50)]
                 
                 fig_conv = px.line(y=running_mean, title="Convergence of Mean Value (Law of Large Numbers)", 
