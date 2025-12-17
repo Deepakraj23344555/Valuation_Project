@@ -190,7 +190,7 @@ def create_detailed_report(company_name, mkt_data, ev_dict, wacc, comps_df):
 with st.sidebar:
     st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Python-logo-notext.svg/242px-Python-logo-notext.svg.png", width=40)
     st.title("GT Terminal")
-    st.caption("Professional Edition v7.0")
+    st.caption("Professional Edition v8.0")
     st.markdown("---")
     
     nav = st.radio("Navigation", 
@@ -199,7 +199,7 @@ with st.sidebar:
          "💎 DCF & Scenario Analysis", 
          "🌍 Comps Regression",
          "⚡ Risk & Reporting",
-         "🏥 Financial Health (Z-Score)"]) # New Tab
+         "🏥 Financial Health (Z-Score)"])
     
     st.markdown("---")
     st.info("💡 **Analyst Note:** Use the 'Live Market Terminal' to fetch real-time data before valuing.")
@@ -271,12 +271,11 @@ if nav == "🗂️ Project Setup":
                 else:
                     st.error("Failed to fetch data.")
 
-    # EXPORT BUTTON (New Feature)
+    # EXPORT BUTTON
     if 'scenarios' in st.session_state:
         st.markdown("---")
         st.markdown("### 📤 Export Models")
         
-        # Combine into one CSV for download
         combined_export = pd.DataFrame()
         for name, df in st.session_state['scenarios'].items():
             temp = df.copy()
@@ -291,7 +290,6 @@ if nav == "🗂️ Project Setup":
             mime='text/csv',
         )
         
-        # Preview Chart
         fig_prev = px.bar(combined_export, x='Year', y='Revenue', color='Scenario', barmode='group',
                           color_discrete_map={'Bear': '#E74C3C', 'Base': '#F1C40F', 'Bull': '#27AE60'})
         fig_prev.update_layout(paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#E6D5B8"))
@@ -321,11 +319,10 @@ elif nav == "📈 Live Market Terminal":
                 m4.metric("P/E", f"{mkt_data['pe_ratio']:.1f}x")
                 m5.metric("Rf Rate", f"{mkt_data['rf_rate']:.2%}")
                 
-                # --- TECHNICAL ANALYSIS (New Feature) ---
+                # --- TECHNICAL ANALYSIS ---
                 st.markdown("### Technical Analysis (Price, SMA, RSI)")
                 hist_df = mkt_data['history'].copy()
                 
-                # Calc Indicators
                 hist_df['SMA_50'] = hist_df['Close'].rolling(window=50).mean()
                 hist_df['SMA_200'] = hist_df['Close'].rolling(window=200).mean()
                 hist_df['RSI'] = calculate_rsi(hist_df['Close'])
@@ -354,7 +351,7 @@ elif nav == "📈 Live Market Terminal":
                                       font=dict(color="#E6D5B8"), yaxis=dict(range=[0,100]))
                 st.plotly_chart(fig_rsi, use_container_width=True)
 
-                # --- NEWS & SENTIMENT (New Feature) ---
+                # --- NEWS & SENTIMENT ---
                 st.markdown("### 📰 News Sentiment Analysis")
                 try:
                     news = yf.Ticker(ticker).news
@@ -362,8 +359,6 @@ elif nav == "📈 Live Market Terminal":
                         for item in news[:3]:
                             title = item.get('title', 'No Title')
                             link = item.get('link', '#')
-                            
-                            # AI Sentiment
                             blob = TextBlob(title)
                             polarity = blob.sentiment.polarity
                             if polarity > 0.1: icon, color = "🟢 Positive", "green"
@@ -431,7 +426,6 @@ elif nav == "💎 DCF & Scenario Analysis":
         c2.metric("🟡 Base Case EV", f"${ev_results.get('Base', 0):,.0f}")
         c3.metric("🟢 Bull Case EV", f"${ev_results.get('Bull', 0):,.0f}")
         
-        # Football Field Chart
         fig_range = go.Figure()
         colors = {'Bear': '#E74C3C', 'Base': '#F1C40F', 'Bull': '#27AE60'}
         for name, val in ev_results.items():
@@ -440,7 +434,6 @@ elif nav == "💎 DCF & Scenario Analysis":
         fig_range.update_layout(title="Valuation Range", height=300, paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#E6D5B8"))
         st.plotly_chart(fig_range, use_container_width=True)
 
-        # 3D Chart
         df_base = st.session_state.get('base_df')
         if df_base is not None:
             wacc_range = np.linspace(wacc-0.02, wacc+0.02, 20)
@@ -485,7 +478,7 @@ elif nav == "🌍 Comps Regression":
             st.dataframe(comp_df.style.format({"Revenue": "${:,.0f}", "EV": "${:,.0f}", "EV/Rev": "{:.2f}x"}))
 
 # --------------------------
-# TAB 5: RISK
+# TAB 5: RISK (Updated with Iteration Selector)
 # --------------------------
 elif nav == "⚡ Risk & Reporting":
     if 'ev_results' not in st.session_state:
@@ -499,11 +492,18 @@ elif nav == "⚡ Risk & Reporting":
         with c1:
             st.markdown("#### Monte Carlo")
             vol = st.slider("Volatility (σ)", 5, 40, 15) / 100
+            
+            # --- NEW: User Selected Iterations ---
+            iterations = st.selectbox("Number of Simulations", [1000, 5000, 10000, 50000])
+            
             if st.button("▶️ Run Simulation"):
-                sims = base_ev * (1 + np.random.normal(0, vol, 1000))
-                fig_hist = px.histogram(sims, title="Probability Distribution", color_discrete_sequence=['#8B4513'])
-                fig_hist.update_layout(paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#E6D5B8"))
-                st.plotly_chart(fig_hist, use_container_width=True)
+                with st.spinner(f"Running {iterations} simulations..."):
+                    sims = base_ev * (1 + np.random.normal(0, vol, iterations))
+                    fig_hist = px.histogram(sims, title="Probability Distribution", color_discrete_sequence=['#8B4513'])
+                    fig_hist.update_layout(paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#E6D5B8"))
+                    st.plotly_chart(fig_hist, use_container_width=True)
+                    st.success(f"Simulation Complete: Mean EV ${np.mean(sims):,.0f}")
+
         with c2:
             st.markdown("#### PDF Report")
             if st.button("🖨️ Generate Report"):
@@ -526,15 +526,6 @@ elif nav == "🏥 Financial Health (Z-Score)":
         st.warning("⚠️ Please fetch a ticker in 'Live Market Terminal' first.")
     else:
         d = st.session_state['ticker_data']
-        
-        # Pull required data for Z-Score
-        # Formula: Z = 1.2A + 1.4B + 3.3C + 0.6D + 1.0E
-        # A = Working Capital / Total Assets
-        # B = Retained Earnings / Total Assets
-        # C = EBIT / Total Assets
-        # D = Market Value of Equity / Total Liabilities
-        # E = Sales / Total Assets
-        
         try:
             ta = d.get('total_assets', 0)
             tl = d.get('total_liab', 0)
@@ -550,12 +541,9 @@ elif nav == "🏥 Financial Health (Z-Score)":
                 C = ebit / ta
                 D = mkt_cap / tl
                 E = rev / ta
-                
                 z_score = (1.2 * A) + (1.4 * B) + (3.3 * C) + (0.6 * D) + (1.0 * E)
-                
                 st.subheader(f"Altman Z-Score: {z_score:.2f}")
                 
-                # Gauge Chart
                 fig_gauge = go.Figure(go.Indicator(
                     mode = "gauge+number",
                     value = z_score,
@@ -564,37 +552,20 @@ elif nav == "🏥 Financial Health (Z-Score)":
                         'axis': {'range': [0, 5]},
                         'bar': {'color': "black"},
                         'steps': [
-                            {'range': [0, 1.8], 'color': "#E74C3C"},  # Distress
-                            {'range': [1.8, 3.0], 'color': "#F1C40F"}, # Grey Zone
-                            {'range': [3.0, 5.0], 'color': "#27AE60"}  # Safe
+                            {'range': [0, 1.8], 'color': "#E74C3C"}, 
+                            {'range': [1.8, 3.0], 'color': "#F1C40F"}, 
+                            {'range': [3.0, 5.0], 'color': "#27AE60"}
                         ],
-                        'threshold': {
-                            'line': {'color': "black", 'width': 4},
-                            'thickness': 0.75,
-                            'value': z_score
-                        }
+                        'threshold': {'line': {'color': "black", 'width': 4}, 'thickness': 0.75, 'value': z_score}
                     }
                 ))
                 fig_gauge.update_layout(paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#E6D5B8"))
                 st.plotly_chart(fig_gauge, use_container_width=True)
                 
-                # Interpretation
-                if z_score > 3.0:
-                    st.success("✅ **Safe Zone:** Low risk of bankruptcy.")
-                elif z_score > 1.8:
-                    st.warning("⚠️ **Grey Zone:** Moderate risk. Exercise caution.")
-                else:
-                    st.error("🚨 **Distress Zone:** High risk of financial failure.")
-                    
-                with st.expander("View Calculation Details"):
-                    st.write(f"**A (Working Cap / Assets):** {A:.2f}")
-                    st.write(f"**B (Ret. Earnings / Assets):** {B:.2f}")
-                    st.write(f"**C (EBIT / Assets):** {C:.2f}")
-                    st.write(f"**D (Equity / Liabilities):** {D:.2f}")
-                    st.write(f"**E (Sales / Assets):** {E:.2f}")
-                    
+                if z_score > 3.0: st.success("✅ **Safe Zone:** Low risk of bankruptcy.")
+                elif z_score > 1.8: st.warning("⚠️ **Grey Zone:** Moderate risk.")
+                else: st.error("🚨 **Distress Zone:** High risk of financial failure.")
             else:
                 st.error("Insufficient Balance Sheet data available to calculate Z-Score.")
-                
         except Exception as e:
             st.error(f"Error calculating Z-Score: {e}")
