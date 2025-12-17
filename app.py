@@ -8,29 +8,34 @@ from io import BytesIO
 import base64
 from datetime import datetime
 
-# --- 1. CONFIGURATION & STYLING (Dark Coffee Theme) ---
+# --- 1. CONFIGURATION & STYLING (High Contrast Coffee Theme) ---
 st.set_page_config(page_title="GT Valuation Terminal", page_icon="💼", layout="wide")
 
 st.markdown("""
     <style>
-    /* 1. Main Background */
+    /* 1. Main Background - Dark Coffee */
     .stApp { background-color: #2C241B; }
     
-    /* 2. Sidebar Background */
+    /* 2. Sidebar Background - Darker Roast */
     section[data-testid="stSidebar"] { background-color: #1E1915; }
     
-    /* 3. Typography */
+    /* 3. Typography - Headings (Latte Color) */
     h1, h2, h3, h4 { color: #E6D5B8 !important; font-family: 'Helvetica Neue', sans-serif; }
-    p, div, label, span { color: #F3F4F6; }
     
-    /* 4. Sidebar Text */
+    /* 4. General Text - readable grey/white */
+    p, div, span { color: #F3F4F6; }
+    
+    /* 5. LABELS - Force BRIGHT WHITE for visibility */
+    label, .stMarkdown p { color: #FFFFFF !important; font-weight: 500; }
+    
+    /* 6. Sidebar Text - Light Purple/Grey */
     section[data-testid="stSidebar"] * { color: #D1C4E9 !important; }
     
-    /* 5. Metrics */
+    /* 7. METRICS */
     div[data-testid="stMetricValue"] { color: #FFD700; font-size: 26px; font-weight: 700; }
     div[data-testid="stMetricLabel"] { color: #E6D5B8; font-size: 14px; }
     
-    /* 6. Buttons */
+    /* 8. BUTTONS - Caramel/Bronze */
     .stButton>button {
         background-color: #8B4513; color: white !important;
         border: 1px solid #A0522D; border-radius: 4px;
@@ -38,11 +43,35 @@ st.markdown("""
     }
     .stButton>button:hover { background-color: #A0522D; border-color: #FFD700; }
     
-    /* 7. Input Fields */
-    .stTextInput>div>div>input { color: black; background-color: #E6D5B8; }
-    .stNumberInput>div>div>input { color: black; }
+    /* 9. INPUT FIELDS (Text, Number, Date) - HIGH CONTRAST FIX */
+    /* Force Light Background and BLACK Text */
+    .stTextInput>div>div>input { color: black !important; background-color: #F3E5AB !important; font-weight: bold; }
+    .stNumberInput>div>div>input { color: black !important; background-color: #F3E5AB !important; font-weight: bold; }
     
-    /* 8. Tabs */
+    /* 10. SELECTBOX / DROPDOWN - HIGH CONTRAST FIX */
+    /* The box itself */
+    div[data-baseweb="select"] > div {
+        background-color: #F3E5AB !important;
+        color: black !important;
+        font-weight: bold;
+    }
+    /* The text inside the box */
+    div[data-baseweb="select"] span {
+        color: black !important; 
+    }
+    /* The SVG arrow icon */
+    div[data-baseweb="select"] svg {
+        fill: black !important;
+    }
+    /* The Dropdown Menu Options */
+    ul[data-baseweb="menu"] {
+        background-color: #F3E5AB !important;
+    }
+    li[data-baseweb="option"] {
+        color: black !important;
+    }
+    
+    /* 11. Tabs */
     .stTabs [data-baseweb="tab-list"] { gap: 4px; }
     .stTabs [data-baseweb="tab"] { background-color: #3E3226; border-radius: 4px 4px 0 0; color: #E6D5B8; }
     .stTabs [data-baseweb="tab"][aria-selected="true"] { background-color: #8B4513; color: white; }
