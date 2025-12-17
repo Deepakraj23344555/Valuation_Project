@@ -627,4 +627,4 @@ elif nav == "📊 Deep Dive":
                 st.plotly_chart(fig_marg, use_container_width=True)
                 st.dataframe(df_margins.style.format("{:.2f}%"))
             else:
-                st.warning("Could not calculate margins. (Note: Banks often lack 'Gross Margin' data in public feeds)"). MAke this code clean and error Free
+                st.warning("Could not calculate margins. (Note: Banks often lack 'Gross Margin' data in public feeds)")
