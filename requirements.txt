@@ -6,3 +6,4 @@ yfinance
 openpyxl
 statsmodels
 textblob
+matplotlib
