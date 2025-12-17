@@ -39,7 +39,7 @@ st.markdown("""
     }
     .stButton>button:hover { background-color: #A0522D; border-color: #FFD700; }
     
-    /* 7. Input Fields (High Contrast) */
+    /* 7. Input Fields */
     .stTextInput>div>div>input { color: black !important; background-color: #F3E5AB !important; font-weight: bold; }
     .stNumberInput>div>div>input { color: black !important; background-color: #F3E5AB !important; font-weight: bold; }
     
@@ -51,6 +51,9 @@ st.markdown("""
     
     /* 9. Links */
     a { color: #FFD700 !important; text-decoration: none; }
+    
+    /* 10. Dataframe Styling */
+    [data-testid="stDataFrame"] { border: 1px solid #8B4513; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -76,21 +79,22 @@ def get_market_data(ticker):
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
-        # Fetch 2y history for SMA200 calculation
         hist = stock.history(period="2y")
         try:
             rf_rate = yf.Ticker("^TNX").history(period="1d")['Close'].iloc[-1] / 100
         except:
             rf_rate = 0.045
 
-        # Attempt to get Balance Sheet info for Z-Score safely
+        # Balance Sheet for Z-Score & EV Bridge
         bs = stock.balance_sheet
         total_assets = bs.loc['Total Assets'].iloc[0] if 'Total Assets' in bs.index else 0
         total_liab = bs.loc['Total Liabilities Net Minority Interest'].iloc[0] if 'Total Liabilities Net Minority Interest' in bs.index else 0
         retained_earnings = bs.loc['Retained Earnings'].iloc[0] if 'Retained Earnings' in bs.index else 0
         working_capital = (bs.loc['Current Assets'].iloc[0] - bs.loc['Current Liabilities'].iloc[0]) if ('Current Assets' in bs.index and 'Current Liabilities' in bs.index) else 0
+        total_debt = info.get('totalDebt', 0)
+        cash = info.get('totalCash', 0)
+        shares = info.get('sharesOutstanding', 1)
         
-        # Income Statement info
         inc = stock.financials
         ebit = inc.loc['EBIT'].iloc[0] if 'EBIT' in inc.index else 0
         revenue = inc.loc['Total Revenue'].iloc[0] if 'Total Revenue' in inc.index else 0
@@ -106,14 +110,44 @@ def get_market_data(ticker):
             "history": hist,
             "currency": info.get('currency', 'USD'),
             "summary": info.get('longBusinessSummary', "No description available."),
-            # Z-Score Data
+            # Fundamental Data
             "total_assets": total_assets,
             "total_liab": total_liab,
             "retained_earnings": retained_earnings,
             "working_capital": working_capital,
             "ebit": ebit,
-            "revenue": revenue
+            "revenue": revenue,
+            "debt": total_debt,
+            "cash": cash,
+            "shares": shares
         }
+    except:
+        return None
+
+def get_historical_profitability(ticker):
+    try:
+        stock = yf.Ticker(ticker)
+        fin = stock.financials.T
+        if fin.empty: return None
+        
+        # Calculate Margins
+        df = pd.DataFrame(index=fin.index)
+        df['Revenue'] = fin['Total Revenue']
+        df['Gross_Margin'] = (fin['Gross Profit'] / fin['Total Revenue']) * 100
+        
+        # Handle Operating Income naming
+        op_inc_col = 'Operating Income' if 'Operating Income' in fin.columns else 'EBIT'
+        if op_inc_col in fin.columns:
+             df['Operating_Margin'] = (fin[op_inc_col] / fin['Total Revenue']) * 100
+        else:
+             df['Operating_Margin'] = 0
+             
+        df['Net_Margin'] = (fin['Net Income'] / fin['Total Revenue']) * 100
+        
+        # Sort by year ascending
+        df.index = pd.to_datetime(df.index)
+        df = df.sort_index()
+        return df
     except:
         return None
 
@@ -190,7 +224,7 @@ def create_detailed_report(company_name, mkt_data, ev_dict, wacc, comps_df):
 with st.sidebar:
     st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Python-logo-notext.svg/242px-Python-logo-notext.svg.png", width=40)
     st.title("GT Terminal")
-    st.caption("Professional Edition v8.0")
+    st.caption("Ultimate Edition v9.0")
     st.markdown("---")
     
     nav = st.radio("Navigation", 
@@ -199,7 +233,8 @@ with st.sidebar:
          "💎 DCF & Scenario Analysis", 
          "🌍 Comps Regression",
          "⚡ Risk & Reporting",
-         "🏥 Financial Health (Z-Score)"])
+         "🏥 Financial Health (Z-Score)",
+         "📊 Deep Dive (New)"])
     
     st.markdown("---")
     st.info("💡 **Analyst Note:** Use the 'Live Market Terminal' to fetch real-time data before valuing.")
@@ -239,7 +274,6 @@ if nav == "🗂️ Project Setup":
         st.markdown("#### Define Scenarios")
         c1, c2, c3 = st.columns(3)
         
-        # Input scenarios
         with c1:
             st.markdown("🔴 **Bear Case**")
             bear_g = st.number_input("Growth % (Bear)", value=2.0) / 100
@@ -271,7 +305,6 @@ if nav == "🗂️ Project Setup":
                 else:
                     st.error("Failed to fetch data.")
 
-    # EXPORT BUTTON
     if 'scenarios' in st.session_state:
         st.markdown("---")
         st.markdown("### 📤 Export Models")
@@ -311,7 +344,6 @@ elif nav == "📈 Live Market Terminal":
                 st.session_state['ticker_data'] = mkt_data 
                 st.session_state['ticker_name'] = mkt_data['name']
                 
-                # METRICS
                 m1, m2, m3, m4, m5 = st.columns(5)
                 m1.metric("Current Price", f"{mkt_data['currency']} {mkt_data['price']:,.2f}")
                 m2.metric("Market Cap", f"${mkt_data['mkt_cap']/1e9:,.1f}B")
@@ -320,14 +352,12 @@ elif nav == "📈 Live Market Terminal":
                 m5.metric("Rf Rate", f"{mkt_data['rf_rate']:.2%}")
                 
                 # --- TECHNICAL ANALYSIS ---
-                st.markdown("### Technical Analysis (Price, SMA, RSI)")
+                st.markdown("### Technical Analysis")
                 hist_df = mkt_data['history'].copy()
-                
                 hist_df['SMA_50'] = hist_df['Close'].rolling(window=50).mean()
                 hist_df['SMA_200'] = hist_df['Close'].rolling(window=200).mean()
                 hist_df['RSI'] = calculate_rsi(hist_df['Close'])
                 
-                # Chart 1: Price + SMA
                 fig_candle = go.Figure()
                 fig_candle.add_trace(go.Candlestick(x=hist_df.index,
                     open=hist_df['Open'], high=hist_df['High'],
@@ -337,22 +367,21 @@ elif nav == "📈 Live Market Terminal":
                                                 line=dict(color='#FFD700', width=1), name='SMA 50'))
                 fig_candle.add_trace(go.Scatter(x=hist_df.index, y=hist_df['SMA_200'], 
                                                 line=dict(color='#00BFFF', width=1), name='SMA 200'))
-                fig_candle.update_layout(title="Price Action & Moving Averages", height=500, 
+                fig_candle.update_layout(title="Price vs SMA 50/200", height=500, 
                                          paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
                                          font=dict(color="#E6D5B8"), xaxis_rangeslider_visible=False)
                 st.plotly_chart(fig_candle, use_container_width=True)
                 
-                # Chart 2: RSI
                 fig_rsi = go.Figure(go.Scatter(x=hist_df.index, y=hist_df['RSI'], line=dict(color='#E67E22')))
                 fig_rsi.add_hline(y=70, line_dash="dash", line_color="red", annotation_text="Overbought")
                 fig_rsi.add_hline(y=30, line_dash="dash", line_color="green", annotation_text="Oversold")
-                fig_rsi.update_layout(title="Relative Strength Index (RSI)", height=300, 
+                fig_rsi.update_layout(title="RSI (14)", height=300, 
                                       paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
                                       font=dict(color="#E6D5B8"), yaxis=dict(range=[0,100]))
                 st.plotly_chart(fig_rsi, use_container_width=True)
 
                 # --- NEWS & SENTIMENT ---
-                st.markdown("### 📰 News Sentiment Analysis")
+                st.markdown("### 📰 News Sentiment")
                 try:
                     news = yf.Ticker(ticker).news
                     if news:
@@ -364,7 +393,6 @@ elif nav == "📈 Live Market Terminal":
                             if polarity > 0.1: icon, color = "🟢 Positive", "green"
                             elif polarity < -0.1: icon, color = "🔴 Negative", "red"
                             else: icon, color = "⚪ Neutral", "grey"
-                            
                             st.markdown(f"**[{title}]({link})**")
                             st.caption(f"Sentiment: :{color}[{icon}]")
                             st.divider()
@@ -403,7 +431,14 @@ elif nav == "💎 DCF & Scenario Analysis":
         tax = st.session_state.get('tax_rate', 0.25)
         tgr = st.slider("Terminal Growth Rate (%)", 1.0, 5.0, 2.5, step=0.1) / 100
         
+        # Pull balance sheet items for Equity Value Bridge
+        mkt = st.session_state.get('ticker_data', {})
+        net_debt = mkt.get('debt', 0) - mkt.get('cash', 0)
+        shares = mkt.get('shares', 1)
+        
         ev_results = {}
+        share_price_results = {}
+        
         for name, df in scenarios.items():
             df_calc = df.copy()
             if 'EBITDA' not in df_calc.columns: df_calc['EBITDA'] = df_calc['Revenue'] * df_calc['EBITDA_Margin']
@@ -415,7 +450,10 @@ elif nav == "💎 DCF & Scenario Analysis":
             
             tv = (df_calc['UFCF'].iloc[-1] * (1 + tgr)) / (wacc - tgr)
             pv_tv = tv / ((1 + wacc) ** len(df_calc))
-            ev_results[name] = df_calc['PV'].sum() + pv_tv
+            
+            ev_val = df_calc['PV'].sum() + pv_tv
+            ev_results[name] = ev_val
+            share_price_results[name] = (ev_val - net_debt) / shares
             
             if name == 'Base': st.session_state['base_df'] = df_calc
 
@@ -426,28 +464,44 @@ elif nav == "💎 DCF & Scenario Analysis":
         c2.metric("🟡 Base Case EV", f"${ev_results.get('Base', 0):,.0f}")
         c3.metric("🟢 Bull Case EV", f"${ev_results.get('Bull', 0):,.0f}")
         
+        # Football Field
+        st.markdown("#### Valuation Range")
         fig_range = go.Figure()
         colors = {'Bear': '#E74C3C', 'Base': '#F1C40F', 'Bull': '#27AE60'}
         for name, val in ev_results.items():
             fig_range.add_trace(go.Bar(x=[val], y=[name], orientation='h', marker_color=colors.get(name, 'grey'),
                                        text=f"${val:,.0f}", textposition='auto', name=name))
-        fig_range.update_layout(title="Valuation Range", height=300, paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#E6D5B8"))
+        fig_range.update_layout(height=300, paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#E6D5B8"))
         st.plotly_chart(fig_range, use_container_width=True)
 
-        df_base = st.session_state.get('base_df')
-        if df_base is not None:
-            wacc_range = np.linspace(wacc-0.02, wacc+0.02, 20)
-            tgr_range = np.linspace(tgr-0.01, tgr+0.01, 20)
-            X, Y = np.meshgrid(wacc_range, tgr_range)
-            last_cf = df_base['UFCF'].iloc[-1]
-            pv_explicit = df_base['PV'].sum()
-            TV_mesh = (last_cf * (1 + Y)) / (X - Y)
-            PV_TV_mesh = TV_mesh / ((1 + X) ** len(df_base))
-            Z = pv_explicit + PV_TV_mesh
-            fig_3d = go.Figure(data=[go.Surface(z=Z, x=X*100, y=Y*100, colorscale='YlOrBr')])
-            fig_3d.update_layout(scene=dict(xaxis_title='WACC', yaxis_title='Growth', zaxis_title='EV'),
-                                 paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#E6D5B8"), height=500)
-            st.plotly_chart(fig_3d, use_container_width=True)
+        # 2D SENSITIVITY HEATMAP (New Feature)
+        st.divider()
+        st.markdown("#### 🔢 2D Sensitivity Matrix (Share Price)")
+        
+        # Generate Matrix
+        wacc_sens = np.linspace(wacc-0.02, wacc+0.02, 5)
+        tgr_sens = np.linspace(tgr-0.01, tgr+0.01, 5)
+        
+        base_df_sens = st.session_state.get('base_df')
+        if base_df_sens is not None:
+            last_cf = base_df_sens['UFCF'].iloc[-1]
+            pv_explicit = base_df_sens['PV'].sum()
+            
+            matrix_data = []
+            for t_rate in tgr_sens:
+                row = []
+                for w_rate in wacc_sens:
+                    tv_s = (last_cf * (1 + t_rate)) / (w_rate - t_rate)
+                    pv_tv_s = tv_s / ((1 + w_rate) ** 5)
+                    ev_s = pv_explicit + pv_tv_s
+                    equity_s = ev_s - net_debt
+                    price_s = equity_s / shares
+                    row.append(price_s)
+                matrix_data.append(row)
+            
+            # Display as styled dataframe
+            df_matrix = pd.DataFrame(matrix_data, index=[f"G: {x:.1%}" for x in tgr_sens], columns=[f"W: {x:.1%}" for x in wacc_sens])
+            st.dataframe(df_matrix.style.format("${:.2f}").background_gradient(cmap='RdYlGn', axis=None))
 
 # --------------------------
 # TAB 4: COMPS
@@ -458,27 +512,46 @@ elif nav == "🌍 Comps Regression":
     if st.button("🔄 Analyze Peers"):
         tickers = [x.strip() for x in comps_input.split(',')]
         data_points = []
+        
         with st.spinner("Fetching Peer Data..."):
             for t in tickers:
                 try:
                     i = yf.Ticker(t).info
                     rev = i.get('totalRevenue', 0)
                     ev_peer = i.get('enterpriseValue', 0)
-                    if rev > 0 and ev_peer > 0:
-                        data_points.append({"Ticker": t, "Revenue": rev, "EV": ev_peer, "EV/Rev": ev_peer/rev})
+                    mkt_cap = i.get('marketCap', 0)
+                    pe = i.get('trailingPE', 0)
+                    pb = i.get('priceToBook', 0)
+                    roe = i.get('returnOnEquity', 0)
+                    debt_eq = i.get('debtToEquity', 0)
+                    
+                    if rev > 0:
+                        data_points.append({
+                            "Ticker": t, "Revenue": rev, "EV": ev_peer, "EV/Rev": ev_peer/rev,
+                            "P/E": pe, "P/B": pb, "ROE": roe, "Debt/Eq": debt_eq
+                        })
                 except: pass
         if data_points:
             comp_df = pd.DataFrame(data_points)
             st.session_state['comps'] = comp_df
+            
+            # Regression
             fig_scat = px.scatter(comp_df, x="Revenue", y="EV", text="Ticker", trendline="ols",
                                   title="Market Regression", color_discrete_sequence=['#FFD700'])
             fig_scat.update_traces(textposition='top center', marker=dict(size=12))
             fig_scat.update_layout(paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#E6D5B8"))
             st.plotly_chart(fig_scat, use_container_width=True)
-            st.dataframe(comp_df.style.format({"Revenue": "${:,.0f}", "EV": "${:,.0f}", "EV/Rev": "{:.2f}x"}))
+            
+            # DETAILED TABLE (New Feature)
+            st.markdown("### 📋 Head-to-Head Comparison")
+            st.dataframe(comp_df.style.format({
+                "Revenue": "${:,.0f}", "EV": "${:,.0f}", 
+                "EV/Rev": "{:.2f}x", "P/E": "{:.1f}x", 
+                "P/B": "{:.1f}x", "ROE": "{:.1%}", "Debt/Eq": "{:.1f}"
+            }))
 
 # --------------------------
-# TAB 5: RISK (Updated with Iteration Selector)
+# TAB 5: RISK
 # --------------------------
 elif nav == "⚡ Risk & Reporting":
     if 'ev_results' not in st.session_state:
@@ -492,18 +565,12 @@ elif nav == "⚡ Risk & Reporting":
         with c1:
             st.markdown("#### Monte Carlo")
             vol = st.slider("Volatility (σ)", 5, 40, 15) / 100
-            
-            # --- NEW: User Selected Iterations ---
             iterations = st.selectbox("Number of Simulations", [1000, 5000, 10000, 50000])
-            
             if st.button("▶️ Run Simulation"):
-                with st.spinner(f"Running {iterations} simulations..."):
-                    sims = base_ev * (1 + np.random.normal(0, vol, iterations))
-                    fig_hist = px.histogram(sims, title="Probability Distribution", color_discrete_sequence=['#8B4513'])
-                    fig_hist.update_layout(paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#E6D5B8"))
-                    st.plotly_chart(fig_hist, use_container_width=True)
-                    st.success(f"Simulation Complete: Mean EV ${np.mean(sims):,.0f}")
-
+                sims = base_ev * (1 + np.random.normal(0, vol, iterations))
+                fig_hist = px.histogram(sims, title="Probability Distribution", color_discrete_sequence=['#8B4513'])
+                fig_hist.update_layout(paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#E6D5B8"))
+                st.plotly_chart(fig_hist, use_container_width=True)
         with c2:
             st.markdown("#### PDF Report")
             if st.button("🖨️ Generate Report"):
@@ -517,55 +584,53 @@ elif nav == "⚡ Risk & Reporting":
                 st.markdown(href, unsafe_allow_html=True)
 
 # --------------------------
-# TAB 6: FINANCIAL HEALTH (NEW)
+# TAB 6: HEALTH
 # --------------------------
 elif nav == "🏥 Financial Health (Z-Score)":
-    st.title("🏥 Financial Health & Bankruptcy Risk")
-    
+    st.title("🏥 Financial Health")
     if 'ticker_data' not in st.session_state:
-        st.warning("⚠️ Please fetch a ticker in 'Live Market Terminal' first.")
+        st.warning("⚠️ Fetch ticker in Tab 2 first.")
     else:
         d = st.session_state['ticker_data']
         try:
-            ta = d.get('total_assets', 0)
-            tl = d.get('total_liab', 0)
-            re = d.get('retained_earnings', 0)
-            wc = d.get('working_capital', 0)
-            ebit = d.get('ebit', 0)
-            rev = d.get('revenue', 0)
-            mkt_cap = d.get('mkt_cap', 0)
-
-            if ta > 0 and tl > 0:
-                A = wc / ta
-                B = re / ta
-                C = ebit / ta
-                D = mkt_cap / tl
-                E = rev / ta
-                z_score = (1.2 * A) + (1.4 * B) + (3.3 * C) + (0.6 * D) + (1.0 * E)
-                st.subheader(f"Altman Z-Score: {z_score:.2f}")
+            ta, tl, re, wc = d['total_assets'], d['total_liab'], d['retained_earnings'], d['working_capital']
+            ebit, rev, mkt_cap = d['ebit'], d['revenue'], d['mkt_cap']
+            if ta > 0:
+                z = (1.2*(wc/ta)) + (1.4*(re/ta)) + (3.3*(ebit/ta)) + (0.6*(mkt_cap/tl)) + (1.0*(rev/ta))
+                st.metric("Altman Z-Score", f"{z:.2f}")
                 
                 fig_gauge = go.Figure(go.Indicator(
-                    mode = "gauge+number",
-                    value = z_score,
-                    title = {'text': "Bankruptcy Risk"},
-                    gauge = {
-                        'axis': {'range': [0, 5]},
-                        'bar': {'color': "black"},
-                        'steps': [
-                            {'range': [0, 1.8], 'color': "#E74C3C"}, 
-                            {'range': [1.8, 3.0], 'color': "#F1C40F"}, 
-                            {'range': [3.0, 5.0], 'color': "#27AE60"}
-                        ],
-                        'threshold': {'line': {'color': "black", 'width': 4}, 'thickness': 0.75, 'value': z_score}
-                    }
-                ))
+                    mode="gauge+number", value=z, title={'text': "Bankruptcy Risk"},
+                    gauge={'axis': {'range': [0, 5]}, 'bar': {'color': "black"},
+                           'steps': [{'range': [0, 1.8], 'color': "#E74C3C"}, 
+                                     {'range': [1.8, 3.0], 'color': "#F1C40F"}, 
+                                     {'range': [3.0, 5.0], 'color': "#27AE60"}]}))
                 fig_gauge.update_layout(paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#E6D5B8"))
                 st.plotly_chart(fig_gauge, use_container_width=True)
+            else: st.error("Data missing for Z-Score.")
+        except: st.error("Calculation Error.")
+
+# --------------------------
+# TAB 7: DEEP DIVE (NEW)
+# --------------------------
+elif nav == "📊 Deep Dive (New)":
+    st.title("📊 Fundamental Deep Dive")
+    if 'ticker_name' not in st.session_state:
+        st.warning("⚠️ Fetch ticker in Tab 2 first.")
+    else:
+        ticker = st.session_state['ticker_name']
+        st.subheader(f"Historical Profitability: {ticker}")
+        
+        with st.spinner("Fetching historical margins..."):
+            df_margins = get_historical_profitability(ticker)
+            
+            if df_margins is not None:
+                fig_marg = px.line(df_margins, x=df_margins.index, y=['Gross_Margin', 'Operating_Margin', 'Net_Margin'],
+                                   title="Margin Trends (Last 4 Years)", markers=True)
+                fig_marg.update_layout(paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#E6D5B8"), 
+                                       yaxis_title="Margin (%)", xaxis_title="Year")
+                st.plotly_chart(fig_marg, use_container_width=True)
                 
-                if z_score > 3.0: st.success("✅ **Safe Zone:** Low risk of bankruptcy.")
-                elif z_score > 1.8: st.warning("⚠️ **Grey Zone:** Moderate risk.")
-                else: st.error("🚨 **Distress Zone:** High risk of financial failure.")
+                st.dataframe(df_margins.style.format("{:.2f}%", subset=['Gross_Margin', 'Operating_Margin', 'Net_Margin']))
             else:
-                st.error("Insufficient Balance Sheet data available to calculate Z-Score.")
-        except Exception as e:
-            st.error(f"Error calculating Z-Score: {e}")
+                st.error("Could not fetch historical financial data.")
