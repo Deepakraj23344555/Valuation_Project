@@ -3,92 +3,48 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
+import yfinance as yf
 from io import BytesIO
+import base64
 
-# --- 1. CONFIGURATION & STYLING ---
-st.set_page_config(page_title="GT Valuation Analytics", page_icon="💼", layout="wide")
+# --- 1. CONFIGURATION & STYLING (Dark Brown Theme) ---
+st.set_page_config(page_title="GT Valuation Terminal", page_icon="💼", layout="wide")
 
-# --- EXECUTIVE THEME CSS (Dark Brown & Gold) ---
 st.markdown("""
     <style>
     /* 1. Main Background - Dark Coffee Brown */
-    .stApp { 
-        background-color: #2C241B; 
-    }
+    .stApp { background-color: #2C241B; }
     
     /* 2. Sidebar Background - Darker Charcoal Brown */
-    section[data-testid="stSidebar"] {
-        background-color: #1E1915; 
-    }
+    section[data-testid="stSidebar"] { background-color: #1E1915; }
     
-    /* 3. Text Visibility Fix - Global (White for Dark Background) */
-    h1, h2, h3, h4, h5, h6 {
-        color: #E6D5B8 !important; /* Gold/Beige for Headings */
-        font-family: 'Helvetica Neue', sans-serif;
-    }
-    p, div, label, span {
-        color: #F3F4F6; /* Off-White for body text */
-    }
+    /* 3. Global Text - Gold/Beige/White */
+    h1, h2, h3, h4 { color: #E6D5B8 !important; font-family: 'Helvetica Neue', sans-serif; }
+    p, div, label, span { color: #F3F4F6; }
     
-    /* 4. Sidebar Text Color */
-    section[data-testid="stSidebar"] h1, 
-    section[data-testid="stSidebar"] h2, 
-    section[data-testid="stSidebar"] span, 
-    section[data-testid="stSidebar"] label, 
-    section[data-testid="stSidebar"] div,
-    section[data-testid="stSidebar"] p {
-        color: #D1C4E9 !important; /* Light Lavender/Gray for contrast */
-    }
+    /* 4. Sidebar Specifics */
+    section[data-testid="stSidebar"] * { color: #D1C4E9 !important; }
     
-    /* 5. Metric Cards - Gold Accent */
-    div[data-testid="stMetricValue"] { 
-        font-size: 28px; 
-        color: #FFD700; /* Gold */
-        font-weight: 700;
-    }
-    div[data-testid="stMetricLabel"] {
-        font-weight: 600;
-        color: #E6D5B8; /* Beige */
-    }
+    /* 5. Metric Cards */
+    div[data-testid="stMetricValue"] { color: #FFD700; font-size: 28px; font-weight: 700; }
+    div[data-testid="stMetricLabel"] { color: #E6D5B8; }
     
-    /* 6. Professional Buttons - Gold/Brown Theme */
+    /* 6. Buttons */
     .stButton>button {
-        background-color: #8B4513; /* Saddle Brown */
-        color: white !important;
-        border-radius: 6px;
-        border: 1px solid #A0522D;
-        font-weight: 600;
-        padding: 0.5rem 1rem;
-        width: 100%;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        background-color: #8B4513; color: white !important;
+        border: 1px solid #A0522D; border-radius: 6px;
     }
-    .stButton>button:hover { 
-        background-color: #A0522D; 
-        box-shadow: 0 4px 8px rgba(0,0,0,0.4);
-    }
+    .stButton>button:hover { background-color: #A0522D; }
     
-    /* 7. Containers/Tabs (Dark Cards) */
-    .stTabs [data-baseweb="tab-list"] { gap: 8px; }
-    .stTabs [data-baseweb="tab"] { 
-        background-color: #3E3226; /* Lighter Brown for Tabs */
-        border-radius: 4px 4px 0 0; 
-        padding: 10px 20px;
-        color: #E6D5B8; 
-    }
-    
-    /* 8. Fix Dataframes to be readable on dark background */
-    div[data-testid="stDataFrame"] {
-        background-color: #FFFFFF;
-        border-radius: 5px;
-        padding: 10px;
-    }
+    /* 7. Input Fields (Dark Mode friendly) */
+    .stTextInput>div>div>input { color: black; }
     </style>
     """, unsafe_allow_html=True)
 
 # --- 2. HELPER FUNCTIONS ---
 
 def generate_template():
-    """Generates a dummy Excel file for the user."""
+    """Generates a dummy Excel file."""
     data = {
         'Year': [2025, 2026, 2027, 2028, 2029],
         'Revenue': [1000, 1100, 1210, 1331, 1464],
@@ -103,284 +59,298 @@ def generate_template():
         df.to_excel(writer, index=False, sheet_name='Model_Input')
     return output.getvalue()
 
-def calculate_wacc(rf, beta, erp, cost_debt, tax_rate, equity_weight, debt_weight):
-    """Calculates WACC using CAPM."""
-    cost_equity = rf + beta * (erp - rf) 
-    after_tax_cost_debt = cost_debt * (1 - tax_rate)
-    wacc = (cost_equity * equity_weight) + (after_tax_cost_debt * debt_weight)
-    return wacc, cost_equity
+@st.cache_data
+def get_market_data(ticker):
+    """Fetches live data from Yahoo Finance."""
+    try:
+        stock = yf.Ticker(ticker)
+        info = stock.info
+        # Get 10Y Treasury Yield as proxy for Risk Free Rate
+        treasury = yf.Ticker("^TNX") 
+        rf_rate = treasury.history(period="1d")['Close'].iloc[-1] / 100
+        
+        return {
+            "beta": info.get('beta', 1.0),
+            "price": info.get('currentPrice', 0),
+            "mkt_cap": info.get('marketCap', 0),
+            "debt": info.get('totalDebt', 0),
+            "rf_rate": rf_rate,
+            "name": info.get('longName', ticker)
+        }
+    except Exception as e:
+        return None
+
+def create_html_report(company_name, ev, wacc, upside, peers_data):
+    """Generates a clean HTML Summary Report."""
+    html = f"""
+    <html>
+    <head>
+        <style>
+            body {{ font-family: Arial, sans-serif; color: #333; }}
+            .header {{ background-color: #2C241B; color: #FFD700; padding: 20px; text-align: center; }}
+            .metric {{ font-size: 24px; font-weight: bold; color: #8B4513; }}
+            table {{ border-collapse: collapse; width: 100%; margin-top: 20px; }}
+            th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+            th {{ background-color: #f2f2f2; }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>Valuation Tear Sheet: {company_name}</h1>
+            <p>Generated by GT Valuation Engine</p>
+        </div>
+        <h2>1. Intrinsic Valuation (DCF)</h2>
+        <p>Implied Enterprise Value: <span class="metric">${ev:,.0f}</span></p>
+        <p>WACC Used: <span class="metric">{wacc:.2%}</span></p>
+        <p>Upside Potential (95% Conf.): <span class="metric">${upside:,.0f}</span></p>
+        
+        <h2>2. Relative Valuation (Public Comps)</h2>
+        {peers_data.to_html(index=False)}
+        
+        <br><hr>
+        <p><i>Confidential - For Internal Use Only</i></p>
+    </body>
+    </html>
+    """
+    return html
 
 # --- 3. SIDEBAR NAVIGATION ---
 with st.sidebar:
-    st.title("💼 Valuation Engine") 
-    st.caption("Grant Thornton | Live Project v1.4")
+    st.title("💼 GT Terminal")
+    st.caption("Live Market Data Enabled v2.0")
     st.markdown("---")
     
-    # Navigation Radio Button
-    nav = st.radio("Navigation Module", 
-        ["🗂️ Data Manager", 
-         "⚖️ Cost of Capital (WACC)", 
+    nav = st.radio("Module", 
+        ["🗂️ Data & Scenarios", 
+         "⚖️ Live WACC Builder", 
          "💎 Intrinsic Valuation", 
-         "⚡ Stress Testing (VaR)", 
-         "📝 Assumptions & Logic"])
+         "🌍 Relative Valuation",
+         "⚡ Risk & Reporting"])
     
     st.markdown("---")
-    st.info("💡 **Analyst Note:** Ensure all inputs are annual figures in USD Millions.")
+    st.info("💡 **Pro Tip:** Use 'Live WACC' to fetch real-time Beta.")
 
 # --- 4. MAIN APP LOGIC ---
 
 # --------------------------
-# TAB 1: DATA MANAGER
+# TAB 1: DATA & SCENARIOS
 # --------------------------
-if nav == "🗂️ Data Manager":
+if nav == "🗂️ Data & Scenarios":
     st.title("🗂️ Data Management")
-    st.markdown("Initialize the model by importing client financial data.")
-    st.divider()
-
+    
     col1, col2 = st.columns(2)
     with col1:
-        st.subheader("1. Template Access")
-        st.write("Standardized template for financial ingestion.")
-        template = generate_template()
-        st.download_button("💾 Download Standard Template", data=template, file_name="GT_Client_Template.xlsx")
-    
-    with col2:
-        st.subheader("2. Data Ingestion")
-        uploaded_file = st.file_uploader("Import Excel File", type=['xlsx'])
-        
+        st.subheader("1. Financial Model")
+        uploaded_file = st.file_uploader("Upload Excel Model", type=['xlsx'])
         if uploaded_file:
             df = pd.read_excel(uploaded_file)
-            st.session_state['data'] = df 
-            st.success("✅ Data Successfully Ingested")
-            with st.expander("👁️ View Raw Data (Click to Expand)"):
-                st.dataframe(df, use_container_width=True)
+            st.session_state['data'] = df
+            st.success("Data Loaded")
+        else:
+            st.warning("Awaiting Upload...")
+            template = generate_template()
+            st.download_button("💾 Get Template", data=template, file_name="GT_Template.xlsx")
+
+    with col2:
+        st.subheader("2. Scenario Manager")
+        st.markdown("Save assumptions to toggle quickly.")
+        
+        if 'scenarios' not in st.session_state:
+            st.session_state['scenarios'] = {}
+        
+        scen_name = st.text_input("Scenario Name (e.g., Bull Case)")
+        if st.button("➕ Save Current State"):
+            # Mock saving key variables (in real app, you'd link these to sliders)
+            st.session_state['scenarios'][scen_name] = "Saved" 
+            st.success(f"Scenario '{scen_name}' saved!")
+        
+        st.write("Saved Scenarios:", list(st.session_state['scenarios'].keys()))
 
 # --------------------------
-# TAB 2: WACC BUILDER
+# TAB 2: LIVE WACC BUILDER
 # --------------------------
-elif nav == "⚖️ Cost of Capital (WACC)":
-    st.title("⚖️ Cost of Capital Builder")
-    st.markdown("Configure the discount rate using the **Capital Asset Pricing Model (CAPM)**.")
-    st.divider()
+elif nav == "⚖️ Live WACC Builder":
+    st.title("⚖️ Live Cost of Capital")
     
+    # LIVE TICKER SEARCH
+    ticker = st.text_input("🔍 Search Ticker (e.g., AAPL, MSFT, RELIANCE.NS)", placeholder="Enter symbol to fetch data...")
+    
+    live_beta = 1.0
+    live_rf = 0.04
+    market_cap_display = "N/A"
+    
+    if ticker:
+        with st.spinner(f"Connecting to Exchange for {ticker}..."):
+            mkt_data = get_market_data(ticker)
+            if mkt_data:
+                live_beta = mkt_data['beta']
+                live_rf = mkt_data['rf_rate']
+                market_cap_display = f"${mkt_data['mkt_cap']/1e9:,.1f}B"
+                st.success(f"✅ Connected: {mkt_data['name']} | Price: ${mkt_data['price']}")
+            else:
+                st.error("Ticker not found.")
+
+    st.divider()
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.markdown("#### Equity Parameters") 
-        rf = st.number_input("Risk-Free Rate (Rf) %", 3.0, 10.0, 4.25) / 100
-        beta = st.number_input("Levered Beta (β)", 0.5, 3.0, 1.15)
-        erp = st.number_input("Market Risk Premium (Rm-Rf) %", 5.0, 15.0, 10.0) / 100
+        st.markdown("#### Equity (CAPM)")
+        rf = st.number_input("Risk-Free Rate (%)", 0.0, 10.0, live_rf*100) / 100
+        beta = st.number_input("Beta", 0.0, 5.0, live_beta)
+        erp = st.number_input("Market Premium (%)", 0.0, 20.0, 6.0) / 100
+        cost_equity = rf + beta * erp
         
     with col2:
-        st.markdown("#### Debt Parameters")
-        cost_debt = st.number_input("Pre-Tax Cost of Debt (Kd) %", 2.0, 15.0, 6.5) / 100
-        tax_rate = st.number_input("Marginal Tax Rate (t) %", 15.0, 40.0, 25.0) / 100
+        st.markdown("#### Debt & Tax")
+        cost_debt = st.number_input("Pre-Tax Cost of Debt (%)", 0.0, 20.0, 6.5) / 100
+        tax_rate = st.number_input("Tax Rate (%)", 0.0, 50.0, 25.0) / 100
+        after_tax_debt = cost_debt * (1 - tax_rate)
         
     with col3:
         st.markdown("#### Capital Structure")
-        equity_percent = st.slider("Equity %", 0, 100, 75) / 100
-        debt_percent = 1 - equity_percent
-        st.write(f"**Debt %:** {debt_percent:.0%}")
-        
-    # Calculate Logic
-    calc_wacc, cost_equity = calculate_wacc(rf, beta, erp, cost_debt, tax_rate, equity_percent, debt_percent)
+        st.metric("Market Cap (Live)", market_cap_display)
+        equity_weight = st.slider("Equity Weight %", 0, 100, 80) / 100
+        debt_weight = 1 - equity_weight
     
-    # Save WACC to session
-    st.session_state['wacc'] = calc_wacc
+    wacc = (cost_equity * equity_weight) + (after_tax_debt * debt_weight)
+    st.session_state['wacc'] = wacc # Save Global
     st.session_state['tax_rate'] = tax_rate
-    
-    st.markdown("---")
-    st.subheader("Results")
-    metric1, metric2, metric3 = st.columns(3)
-    metric1.metric("Cost of Equity (Ke)", f"{cost_equity:.2%}")
-    metric2.metric("Post-Tax Cost of Debt (Kd)", f"{cost_debt * (1-tax_rate):.2%}")
-    metric3.metric("👉 Final WACC", f"{calc_wacc:.2%}", delta_color="normal")
+    st.session_state['ticker_name'] = ticker if ticker else "Project"
+
+    st.metric("👉 Live WACC", f"{wacc:.2%}", delta="Updated Real-Time" if ticker else None)
 
 # --------------------------
-# TAB 3: DCF ANALYSIS
+# TAB 3: INTRINSIC VALUATION (DCF)
 # --------------------------
 elif nav == "💎 Intrinsic Valuation":
     if 'data' not in st.session_state:
-        st.warning("⚠️ Please upload data in the 'Data Manager' module first.")
+        st.warning("⚠️ Please upload data in the 'Data' tab.")
     else:
         st.title("💎 Discounted Cash Flow (DCF)")
-        
-        # Inputs
         df = st.session_state['data'].copy()
-        wacc = st.session_state.get('wacc', 0.10) # Default 10% if not calculated
-        tax_rate = st.session_state.get('tax_rate', 0.25)
+        wacc = st.session_state.get('wacc', 0.10)
+        tax = st.session_state.get('tax_rate', 0.25)
         
-        st.sidebar.markdown("### 💎 Valuation Controls")
-        tgr = st.sidebar.slider("Terminal Growth Rate (%)", 1.0, 5.0, 2.5) / 100
+        tgr = st.slider("Terminal Growth Rate (%)", 1.0, 5.0, 2.5) / 100
         
-        # --- LOGIC ---
+        # Calculations
         df['EBITDA'] = df['Revenue'] * df['EBITDA_Margin']
-        df['EBIT'] = df['EBITDA'] - df['D_and_A']
-        df['NOPAT'] = df['EBIT'] * (1 - tax_rate)
+        df['NOPAT'] = (df['EBITDA'] - df['D_and_A']) * (1 - tax)
         df['UFCF'] = df['NOPAT'] + df['D_and_A'] - df['CapEx'] - df['Change_in_NWC']
         
         # Discounting
         df['Period'] = range(1, len(df) + 1)
-        df['Discount_Factor'] = 1 / ((1 + wacc) ** df['Period'])
-        df['PV_UFCF'] = df['UFCF'] * df['Discount_Factor']
+        df['PV'] = df['UFCF'] / ((1 + wacc) ** df['Period'])
         
         # Terminal Value
-        last_ufcf = df['UFCF'].iloc[-1]
-        tv = (last_ufcf * (1 + tgr)) / (wacc - tgr)
-        pv_tv = tv * df['Discount_Factor'].iloc[-1]
+        tv = (df['UFCF'].iloc[-1] * (1 + tgr)) / (wacc - tgr)
+        pv_tv = tv / ((1 + wacc) ** len(df))
         
-        enterprise_value = df['PV_UFCF'].sum() + pv_tv
+        ev = df['PV'].sum() + pv_tv
+        st.session_state['ev'] = ev # Save Global
         
-        # SAVE TO STATE (For Risk Tab)
-        st.session_state['enterprise_value'] = enterprise_value
-        
-        # --- OUTPUT ---
-        kpi1, kpi2, kpi3 = st.columns(3)
-        kpi1.metric("Implied Enterprise Value", f"${enterprise_value:,.0f}")
-        kpi2.metric("PV of Terminal Value", f"${pv_tv:,.0f}", f"{(pv_tv/enterprise_value)*100:.1f}% of Total")
-        kpi3.metric("Discount Rate (WACC)", f"{wacc:.2%}")
-        
-        st.divider()
+        # Output
+        k1, k2, k3 = st.columns(3)
+        k1.metric("Enterprise Value", f"${ev:,.0f}")
+        k2.metric("Term Value %", f"{(pv_tv/ev)*100:.1f}%")
+        k3.metric("WACC", f"{wacc:.2%}")
         
         # Visuals
-        tab1, tab2 = st.tabs(["Waterfall Breakdown", "Sensitivity Heatmap"])
-        
-        with tab1:
-            fig = go.Figure(go.Waterfall(
-                orientation = "v",
-                measure = ["relative", "relative", "total"],
-                x = ["PV of Explicit Cash Flows", "PV of Terminal Value", "Enterprise Value"],
-                y = [df['PV_UFCF'].sum(), pv_tv, enterprise_value],
-                connector = {"line":{"color":"#E6D5B8"}}, # Beige Connector
-                textposition = "outside",
-                text = [f"${df['PV_UFCF'].sum():,.0f}", f"${pv_tv:,.0f}", f"${enterprise_value:,.0f}"]
-            ))
-            # Dark Theme for Chart
-            fig.update_layout(
-                title="Enterprise Value Composition", 
-                paper_bgcolor='rgba(0,0,0,0)', 
-                plot_bgcolor='rgba(0,0,0,0)',
-                font=dict(color="#E6D5B8")
-            )
-            fig.update_yaxes(gridcolor='#3E3226')
-            st.plotly_chart(fig, use_container_width=True)
-            
-        with tab2:
-            st.subheader("Sensitivity Analysis: EV based on WACC vs. Growth Rate")
-            
-            wacc_range = [wacc - 0.02, wacc - 0.01, wacc, wacc + 0.01, wacc + 0.02]
-            tgr_range = [tgr - 0.01, tgr - 0.005, tgr, tgr + 0.005, tgr + 0.01]
-            
-            sensitivity_data = []
-            for w in wacc_range:
-                row = []
-                for g in tgr_range:
-                    term_val = (last_ufcf * (1 + g)) / (w - g)
-                    pv_term = term_val * (1 / ((1 + w) ** len(df)))
-                    pv_explicit = (df['UFCF'] * (1 / ((1 + w) ** df['Period']))).sum()
-                    row.append(pv_term + pv_explicit)
-                sensitivity_data.append(row)
-                
-            fig_heat = px.imshow(sensitivity_data,
-                                labels=dict(x="Terminal Growth Rate", y="WACC", color="Enterprise Value"),
-                                x=[f"{x:.1%}" for x in tgr_range],
-                                y=[f"{y:.1%}" for y in wacc_range],
-                                text_auto='.2s', aspect="auto", color_continuous_scale='YlOrBr') # Yellow-Orange-Brown Scale
-            fig_heat.update_layout(
-                paper_bgcolor='rgba(0,0,0,0)', 
-                plot_bgcolor='rgba(0,0,0,0)',
-                font=dict(color="#E6D5B8")
-            )
-            st.plotly_chart(fig_heat, use_container_width=True)
+        fig = go.Figure(go.Waterfall(
+            x = ["Explicit Cash Flows", "Terminal Value", "Total EV"],
+            y = [df['PV'].sum(), pv_tv, ev],
+            connector = {"line":{"color":"#E6D5B8"}},
+        ))
+        fig.update_layout(title="Valuation Bridge", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color="#E6D5B8"))
+        st.plotly_chart(fig, use_container_width=True)
 
 # --------------------------
-# TAB 4: RISK SIMULATION (Updated)
+# TAB 4: RELATIVE VALUATION (COMPS)
 # --------------------------
-elif nav == "⚡ Stress Testing (VaR)":
-    if 'enterprise_value' not in st.session_state:
-        st.warning("⚠️ Please run the 'Intrinsic Valuation' module first.")
+elif nav == "🌍 Relative Valuation":
+    st.title("🌍 Public Comparables Analysis")
+    st.markdown("Compare your valuation against real-time market multiples.")
+    
+    comps_input = st.text_input("Enter Competitor Tickers (comma separated)", "GOOGL, MSFT, META")
+    
+    if st.button("🔄 Fetch Market Multiples"):
+        tickers = [x.strip() for x in comps_input.split(',')]
+        comp_data = []
+        
+        with st.spinner("Analyzing Peers..."):
+            for t in tickers:
+                try:
+                    info = yf.Ticker(t).info
+                    ev_comp = info.get('enterpriseValue', 0)
+                    ebitda = info.get('ebitda', 0)
+                    if ebitda > 0:
+                        multiple = ev_comp / ebitda
+                        comp_data.append({"Ticker": t, "EV/EBITDA": multiple, "Enterprise Value": ev_comp})
+                except:
+                    pass
+        
+        if comp_data:
+            comp_df = pd.DataFrame(comp_data)
+            st.session_state['comps'] = comp_df # Save for report
+            
+            # Display Average
+            avg_mult = comp_df['EV/EBITDA'].mean()
+            st.metric("Industry Average EV/EBITDA", f"{avg_mult:.1f}x")
+            
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                st.dataframe(comp_df.style.format({"EV/EBITDA": "{:.1f}x", "Enterprise Value": "${:,.0f}"}), use_container_width=True)
+            with col2:
+                # Comparison Chart
+                if 'ev' in st.session_state and 'data' in st.session_state:
+                    my_ebitda = (st.session_state['data']['Revenue'][0] * st.session_state['data']['EBITDA_Margin'][0])
+                    my_implied_mult = st.session_state['ev'] / my_ebitda
+                    
+                    fig = go.Figure(go.Bar(
+                        x=['My Project', 'Industry Avg'],
+                        y=[my_implied_mult, avg_mult],
+                        marker_color=['#FFD700', '#8B4513']
+                    ))
+                    fig.update_layout(title="Multiple Benchmarking", paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#E6D5B8"))
+                    st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.error("Could not fetch data. Check tickers.")
+
+# --------------------------
+# TAB 5: REPORTING
+# --------------------------
+elif nav == "⚡ Risk & Reporting":
+    if 'ev' not in st.session_state:
+        st.warning("⚠️ Run Valuation first.")
     else:
-        st.title("⚡ Value at Risk (VaR) Analysis")
-        st.markdown("**Objective:** Stress-test the valuation using stochastic modeling.")
-        st.divider()
-
-        col1, col2 = st.columns(2)
-        with col1:
-            iterations = st.selectbox("Simulation Iterations (N)", [1000, 5000, 10000, 50000], index=1)
-            st.caption("Statistical Significance increases with N.")
+        st.title("⚡ Risk Analysis & Reporting")
         
-        with col2:
-            volatility = st.slider("Implied Volatility (σ)", 5, 40, 15) / 100
-            st.caption("Standard Deviation based on historical peer volatility.")
-
-        if st.button("▶️ Execute Monte Carlo Simulation"):
-            with st.spinner(f"Computing {iterations:,} scenarios..."):
-                
-                # Logic
-                base_ev = st.session_state['enterprise_value']
-                mu = 0 
-                sigma = volatility
-                shocks = np.random.normal(mu, sigma, iterations)
-                simulated_values = base_ev * (1 + shocks)
-                
-                # Metrics
-                mean_val = np.mean(simulated_values)
-                var_95 = np.percentile(simulated_values, 5) # 5th Percentile
-                upside_95 = np.percentile(simulated_values, 95)
-                
-                # Scorecards
-                m1, m2, m3 = st.columns(3)
-                m1.metric("Mean Expected Value", f"${mean_val:,.0f}")
-                m2.metric("Risk Floor (95% Conf.)", f"${var_95:,.0f}", delta_color="inverse")
-                m3.metric("Upside Ceiling (95% Conf.)", f"${upside_95:,.0f}")
-                
-                # Histogram
-                fig_hist = px.histogram(
-                    simulated_values, 
-                    nbins=75, 
-                    title=f"Probability Distribution of Valuation Outcomes (N={iterations:,})",
-                    color_discrete_sequence=['#FFD700'] # Gold Bars
-                )
-                fig_hist.add_vline(x=mean_val, line_dash="dash", line_color="white", annotation_text="Mean")
-                fig_hist.add_vline(x=var_95, line_dash="dot", line_color="red", annotation_text="VaR (5%)")
-                
-                fig_hist.update_layout(
-                    template="plotly_dark", 
-                    xaxis_title="Enterprise Value ($)", 
-                    yaxis_title="Frequency", 
-                    paper_bgcolor='rgba(0,0,0,0)', 
-                    plot_bgcolor='rgba(0,0,0,0)'
-                )
-                st.plotly_chart(fig_hist, use_container_width=True)
-
-# --------------------------
-# TAB 5: DOCUMENTATION
-# --------------------------
-elif nav == "📝 Assumptions & Logic":
-    st.title("📝 Methodology Note")
-    st.markdown("""
-    ### 1. Discounted Cash Flow (DCF)
-    We utilize a 5-year explicit period forecast followed by a terminal value calculation using the Gordon Growth Method.
-    
-    $$
-    Enterprise Value = \\sum_{t=1}^{5} \\frac{UFCF_t}{(1+WACC)^t} + \\frac{Terminal Value}{(1+WACC)^5}
-    $$
-    
-    ### 2. WACC (Capital Asset Pricing Model)
-    The discount rate is derived using the standard CAPM formula:
-    
-    $$
-    K_e = R_f + \\beta (R_m - R_f)
-    $$
-    
-    *Where $R_f$ is the Risk-Free Rate, $\\beta$ is the levered beta, and $(R_m - R_f)$ is the Market Risk Premium.*
-    
-    ### 3. Monte Carlo Simulation
-    To account for forecasting uncertainty, we apply stochastic shocks to the revenue baseline following a normal distribution:
-    
-    $$
-    EV_{sim} = EV_{base} \\times (1 + \\mathcal{N}(0, \\sigma))
-    $$
-    
-    *Where $\\sigma$ represents the implied volatility of the sector.*
-    """)
+        # 1. RISK SIMULATION
+        st.subheader("Monte Carlo Simulation")
+        vol = st.slider("Volatility", 5, 50, 20) / 100
+        base_ev = st.session_state['ev']
+        sims = base_ev * (1 + np.random.normal(0, vol, 1000))
+        upside = np.percentile(sims, 95)
+        
+        fig = px.histogram(sims, nbins=50, title="Valuation Distribution", color_discrete_sequence=['#FFD700'])
+        fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#E6D5B8"))
+        st.plotly_chart(fig, use_container_width=True)
+        
+        st.divider()
+        
+        # 2. REPORT GENERATION
+        st.subheader("📄 Generate Client Report")
+        if st.button("🖨️ Create One-Pager"):
+            # Prepare Data
+            ticker_name = st.session_state.get('ticker_name', 'Project Alpha')
+            wacc_used = st.session_state.get('wacc', 0)
+            comps_df = st.session_state.get('comps', pd.DataFrame())
+            
+            # Generate HTML
+            html_report = create_html_report(ticker_name, base_ev, wacc_used, upside, comps_df)
+            
+            # Convert to Base64 for Download
+            b64 = base64.b64encode(html_report.encode()).decode()
+            href = f'<a href="data:text/html;base64,{b64}" download="Valuation_Report.html" style="background-color: #FFD700; color: black; padding: 10px; text-decoration: none; border-radius: 5px; font-weight: bold;">📥 Download PDF/HTML Report</a>'
+            st.markdown(href, unsafe_allow_html=True)
+            st.success("Report Generated! Click button above.")
