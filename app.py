@@ -103,6 +103,9 @@ def get_market_data(ticker):
         inc = stock.financials
         ebit = inc.loc['EBIT'].iloc[0] if 'EBIT' in inc.index else 0
         revenue = inc.loc['Total Revenue'].iloc[0] if 'Total Revenue' in inc.index else 0
+        
+        # Sector check
+        sector = info.get('sector', 'Unknown')
 
         return {
             "beta": info.get('beta', 1.0),
@@ -115,6 +118,8 @@ def get_market_data(ticker):
             "history": hist,
             "currency": info.get('currency', 'USD'),
             "summary": info.get('longBusinessSummary', "No description available."),
+            "sector": sector,
+            # Fundamental Data
             "total_assets": total_assets,
             "total_liab": total_liab,
             "retained_earnings": retained_earnings,
@@ -135,27 +140,44 @@ def get_historical_profitability(ticker):
         if fin.empty: return None
         
         df = pd.DataFrame(index=fin.index)
-        df['Revenue'] = fin['Total Revenue']
         
-        # Calculate Margins safely
+        # Safe extraction of Total Revenue
+        if 'Total Revenue' in fin.columns:
+            df['Revenue'] = fin['Total Revenue']
+        elif 'Revenue' in fin.columns:
+            df['Revenue'] = fin['Revenue']
+        else:
+            return None # Cannot calculate margins without revenue
+
+        # 1. Gross Margin (Might not exist for Banks)
         if 'Gross Profit' in fin.columns:
-            df['Gross_Margin'] = (fin['Gross Profit'] / fin['Total Revenue']) * 100
+            df['Gross_Margin'] = (fin['Gross Profit'] / df['Revenue']) * 100
         else:
-            df['Gross_Margin'] = 0
-            
-        op_inc_col = 'Operating Income' if 'Operating Income' in fin.columns else 'EBIT'
-        if op_inc_col in fin.columns:
-             df['Operating_Margin'] = (fin[op_inc_col] / fin['Total Revenue']) * 100
-        else:
-             df['Operating_Margin'] = 0
-             
-        if 'Net Income' in fin.columns:
-            df['Net_Margin'] = (fin['Net Income'] / fin['Total Revenue']) * 100
-        else:
-            df['Net_Margin'] = 0
+            df['Gross_Margin'] = np.nan # Skip if missing
+
+        # 2. Operating Margin
+        op_col = None
+        if 'Operating Income' in fin.columns: op_col = 'Operating Income'
+        elif 'EBIT' in fin.columns: op_col = 'EBIT'
+        elif 'Pretax Income' in fin.columns: op_col = 'Pretax Income' # Proxy for banks
         
+        if op_col:
+             df['Operating_Margin'] = (fin[op_col] / df['Revenue']) * 100
+        else:
+             df['Operating_Margin'] = np.nan
+
+        # 3. Net Margin
+        if 'Net Income' in fin.columns:
+            df['Net_Margin'] = (fin['Net Income'] / df['Revenue']) * 100
+        else:
+            df['Net_Margin'] = np.nan
+        
+        # Clean up
         df.index = pd.to_datetime(df.index)
         df = df.sort_index()
+        # Drop columns that are completely NaN (e.g. Gross Margin for Banks)
+        df = df.dropna(axis=1, how='all')
+        
         return df
     except:
         return None
@@ -233,7 +255,7 @@ def create_detailed_report(company_name, mkt_data, ev_dict, wacc, comps_df):
 with st.sidebar:
     st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Python-logo-notext.svg/242px-Python-logo-notext.svg.png", width=40)
     st.title("GT Terminal")
-    st.caption("Ultimate Edition v9.1")
+    st.caption("Ultimate Edition v9.2 (Fix)")
     st.markdown("---")
     
     nav = st.radio("Navigation", 
@@ -308,7 +330,6 @@ if nav == "🗂️ Project Setup":
                 if scenario_dfs:
                     st.session_state['scenarios'] = scenario_dfs
                     st.session_state['ticker_name'] = auto_ticker 
-                    # FIX 1: Store Symbol
                     st.session_state['ticker_symbol'] = auto_ticker 
                     
                     mkt = get_market_data(auto_ticker)
@@ -355,7 +376,6 @@ elif nav == "📈 Live Market Terminal":
             if mkt_data:
                 st.session_state['ticker_data'] = mkt_data 
                 st.session_state['ticker_name'] = mkt_data['name']
-                # FIX 2: Store the Symbol specifically for Tab 7
                 st.session_state['ticker_symbol'] = ticker
                 
                 m1, m2, m3, m4, m5 = st.columns(5)
@@ -503,7 +523,7 @@ elif nav == "💎 DCF & Scenario Analysis":
                 matrix_data.append(row)
             
             df_matrix = pd.DataFrame(matrix_data, index=[f"G: {x:.1%}" for x in tgr_sens], columns=[f"W: {x:.1%}" for x in wacc_sens])
-            # REQUIRES MATPLOTLIB IN REQUIREMENTS.TXT
+            # Uses matplotlib for gradient mapping
             st.dataframe(df_matrix.style.format("${:.2f}").background_gradient(cmap='RdYlGn', axis=None))
 
 # --------------------------
@@ -515,13 +535,13 @@ elif nav == "🌍 Comps Regression":
     if st.button("🔄 Analyze Peers"):
         tickers = [x.strip() for x in comps_input.split(',')]
         data_points = []
+        
         with st.spinner("Fetching Peer Data..."):
             for t in tickers:
                 try:
                     i = yf.Ticker(t).info
                     rev = i.get('totalRevenue', 0)
                     ev_peer = i.get('enterpriseValue', 0)
-                    mkt_cap = i.get('marketCap', 0)
                     pe = i.get('trailingPE', 0)
                     pb = i.get('priceToBook', 0)
                     roe = i.get('returnOnEquity', 0)
@@ -591,9 +611,19 @@ elif nav == "🏥 Financial Health (Z-Score)":
         try:
             ta, tl, re, wc = d['total_assets'], d['total_liab'], d['retained_earnings'], d['working_capital']
             ebit, rev, mkt_cap = d['ebit'], d['revenue'], d['mkt_cap']
+            sector = d.get('sector', 'Unknown')
+            
             if ta > 0:
                 z = (1.2*(wc/ta)) + (1.4*(re/ta)) + (3.3*(ebit/ta)) + (0.6*(mkt_cap/tl)) + (1.0*(rev/ta))
-                st.metric("Altman Z-Score", f"{z:.2f}")
+                
+                # Dynamic Explanation Logic
+                st.subheader(f"Altman Z-Score: {z:.2f}")
+                
+                # Check for "Bank/Financial" sector Warning
+                if 'Financial' in sector or 'Bank' in d['name']:
+                    st.warning("⚠️ **Sector Warning:** This company appears to be in the Financial/Banking sector. The standard Altman Z-Score often produces false 'Distress' signals for banks because of their unique balance sheet structure (high liabilities/deposits).")
+
+                # Gauge Chart
                 fig_gauge = go.Figure(go.Indicator(
                     mode="gauge+number", value=z, title={'text': "Bankruptcy Risk"},
                     gauge={'axis': {'range': [0, 5]}, 'bar': {'color': "black"},
@@ -602,6 +632,28 @@ elif nav == "🏥 Financial Health (Z-Score)":
                                      {'range': [3.0, 5.0], 'color': "#27AE60"}]}))
                 fig_gauge.update_layout(paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#E6D5B8"))
                 st.plotly_chart(fig_gauge, use_container_width=True)
+                
+                # Interpretation & Advice
+                c1, c2 = st.columns(2)
+                
+                with c1:
+                    st.markdown("#### 📝 Score Interpretation")
+                    if z > 3.0:
+                        st.success("**Zone: Safe (> 3.0)**\nThe company shows strong financial health with low risk of bankruptcy in the near term.")
+                    elif z > 1.8:
+                        st.warning("**Zone: Grey (1.8 - 3.0)**\nThe company is in the caution zone. Financials are stable but requires monitoring of debt levels.")
+                    else:
+                        st.error("**Zone: Distress (< 1.8)**\nHigh financial risk. This score suggests potential insolvency issues unless the company is a Bank/Financial institution (see warning above).")
+                
+                with c2:
+                    st.markdown("#### 💡 Investor Suggestions")
+                    if z > 3.0:
+                        st.info("✅ **Strategy:** Long-term Hold / Buy.\n* Good candidate for core portfolio.\n* Focus on valuation (is it cheap?) rather than survival risk.")
+                    elif z > 1.8:
+                        st.info("⚠️ **Strategy:** Monitor / Hedge.\n* Check recent earnings for deteriorating margins.\n* Avoid heavy allocation until score improves.")
+                    else:
+                        st.info("🛑 **Strategy:** High Risk / Speculative.\n* If holding: Re-evaluate thesis immediately.\n* If buying: Only suitable for deep-value turnaround plays.")
+
             else: st.error("Data missing for Z-Score.")
         except: st.error("Calculation Error.")
 
@@ -611,27 +663,26 @@ elif nav == "🏥 Financial Health (Z-Score)":
 elif nav == "📊 Deep Dive":
     st.title("📊 Fundamental Deep Dive")
     
-    # FIX 3: Use the stored Symbol (e.g. "HDFCBANK.NS") instead of the English Name
-    # Fallback to ticker_name if symbol not present (backward compatibility)
     ticker_to_use = st.session_state.get('ticker_symbol', st.session_state.get('ticker_name'))
     
     if not ticker_to_use:
         st.warning("⚠️ Fetch ticker in Tab 2 first.")
     else:
-        # Display nicely with Name
         display_name = st.session_state.get('ticker_name', ticker_to_use)
         st.subheader(f"Historical Profitability: {display_name}")
         
         with st.spinner(f"Fetching historical margins for {ticker_to_use}..."):
             df_margins = get_historical_profitability(ticker_to_use)
             
-            if df_margins is not None:
-                fig_marg = px.line(df_margins, x=df_margins.index, y=['Gross_Margin', 'Operating_Margin', 'Net_Margin'],
-                                   title="Margin Trends (Last 4 Years)", markers=True)
+            if df_margins is not None and not df_margins.empty:
+                # Plot
+                fig_marg = px.line(df_margins, x=df_margins.index, y=df_margins.columns,
+                                   title="Margin Trends", markers=True)
                 fig_marg.update_layout(paper_bgcolor='rgba(0,0,0,0)', font=dict(color="#E6D5B8"), 
                                        yaxis_title="Margin (%)", xaxis_title="Year")
                 st.plotly_chart(fig_marg, use_container_width=True)
                 
-                st.dataframe(df_margins.style.format("{:.2f}%", subset=['Gross_Margin', 'Operating_Margin', 'Net_Margin']))
+                # Table
+                st.dataframe(df_margins.style.format("{:.2f}%"))
             else:
-                st.error("Could not fetch historical financial data.")
+                st.error("Could not fetch historical financial data. (Note: Banks may lack 'Gross Margin' data in standard feeds)")
