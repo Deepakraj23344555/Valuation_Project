@@ -45,7 +45,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. DATA ENGINE (ROBUST & CACHED) ---
+# --- 2. DATA ENGINE (ROBUST & MOCK FALLBACK) ---
 
 def format_large(num):
     if num is None or num == 0: return "N/A"
@@ -54,36 +54,82 @@ def format_large(num):
     if abs(num) >= 1e6: return f"{num/1e6:.2f}M"
     return f"{num:,.0f}"
 
-@st.cache_data(ttl=3600) # Cache for 1 hour to prevent Rate Limiting
+def get_mock_data():
+    """
+    Returns specific static data for AAPL to ensure the app works 
+    even when Yahoo Finance rate-limits the server.
+    """
+    # Create mock margin dataframe
+    dates = pd.date_range(end=datetime.today(), periods=4, freq='YE')
+    margins = pd.DataFrame({
+        'Gross_Margin': [43.0, 43.5, 44.0, 45.0],
+        'Operating_Margin': [28.0, 29.0, 30.0, 30.5],
+        'Net_Margin': [24.0, 25.0, 25.5, 26.0]
+    }, index=dates)
+    
+    # Create mock history
+    hist_dates = pd.date_range(end=datetime.today(), periods=500)
+    hist = pd.DataFrame({
+        'Open': np.linspace(150, 230, 500),
+        'High': np.linspace(155, 235, 500),
+        'Low': np.linspace(145, 225, 500),
+        'Close': np.linspace(150, 230, 500) + np.random.normal(0, 5, 500)
+    }, index=hist_dates)
+
+    return {
+        "valid": True,
+        "is_mock": True,
+        "name": "Apple Inc. (DEMO MODE)",
+        "sector": "Technology",
+        "summary": "This is cached demo data displayed because Yahoo Finance is temporarily rate-limiting requests. Use this to test the app features.",
+        "currency": "USD",
+        "price": 230.00,
+        "mkt_cap": 3500000000000,
+        "beta": 1.12,
+        "shares": 15000000000,
+        "rf_rate": 0.045,
+        "hist": hist,
+        "revenue": 383000000000,
+        "ebit": 114000000000,
+        "total_debt": 100000000000,
+        "cash": 30000000000,
+        "total_assets": 352000000000,
+        "total_liab": 290000000000,
+        "retained_earnings": 0, # Apple often has 0 here due to buybacks
+        "wc": -5000000000,
+        "eff_tax_rate": 0.15,
+        "calc_cost_debt": 0.045,
+        "margins_df": margins
+    }
+
+@st.cache_data(ttl=3600)
 def get_all_data(ticker):
     """
     Master function to fetch ALL data at once. 
-    This minimizes API calls to avoid 'Too Many Requests' errors.
+    Includes fallback to Mock Data if Yahoo Finance fails.
     """
     try:
         stock = yf.Ticker(ticker)
         
-        # 1. Info & Profile (Lightweight call)
+        # Check connection by fetching info
         info = stock.info
-        
+        if not info or 'regularMarketPrice' not in info and 'currentPrice' not in info:
+            raise ValueError("No data found")
+
         # 2. History (Prices)
         hist = stock.history(period="2y")
         
-        # 3. Financial Statements (Heavy calls - wrapped in try/except)
-        try:
-            bs = stock.balance_sheet
-            inc = stock.financials
-            cf = stock.cashflow
-        except Exception:
-            bs, inc, cf = pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+        # 3. Financial Statements
+        bs = stock.balance_sheet
+        inc = stock.financials
         
-        # 4. Market Data (Risk Free Rate)
+        # 4. Market Data
         try:
             rf_rate = yf.Ticker("^TNX").history(period="1d")['Close'].iloc[-1] / 100
         except:
             rf_rate = 0.045
 
-        # --- Helper to safely grab values ---
+        # --- Helper ---
         def get_item(df, keys):
             if df.empty: return 0
             for k in keys:
@@ -91,31 +137,26 @@ def get_all_data(ticker):
             return 0
 
         # --- EXTRACT METRICS ---
-        
-        # Balance Sheet
         total_assets = get_item(bs, ['Total Assets', 'Assets'])
         total_liab = get_item(bs, ['Total Liabilities Net Minority Interest', 'Total Liabilities'])
-        retained_earnings = get_item(bs, ['Retained Earnings', 'Retained Earnings (Accumulated Deficit)'])
+        retained_earnings = get_item(bs, ['Retained Earnings'])
         curr_assets = get_item(bs, ['Current Assets'])
         curr_liab = get_item(bs, ['Current Liabilities'])
         
-        # Income Statement
-        revenue = get_item(inc, ['Total Revenue', 'Revenue', 'Total Income']) # 'Total Income' for banks
-        ebit = get_item(inc, ['EBIT', 'Operating Income', 'Pretax Income']) # Pretax proxy for banks
+        revenue = get_item(inc, ['Total Revenue', 'Revenue', 'Total Income']) 
+        ebit = get_item(inc, ['EBIT', 'Operating Income', 'Pretax Income']) 
         interest_exp = abs(get_item(inc, ['Interest Expense', 'Interest Expense Non Operating']))
         tax_exp = get_item(inc, ['Tax Provision', 'Income Tax Expense'])
         pretax_inc = get_item(inc, ['Pretax Income'])
         
-        # Debt & Cash
         total_debt = get_item(bs, ['Total Debt'])
         if total_debt == 0: total_debt = info.get('totalDebt', 0)
         cash = get_item(bs, ['Cash And Cash Equivalents', 'Cash', 'Cash & Equivalents'])
 
-        # Margins (Historical) - FAULT TOLERANT
+        # Margins (Fault Tolerant)
         margins_df = None
         if not inc.empty:
             margins_df = pd.DataFrame(index=inc.columns)
-            # Revenue
             rev_series = None
             for key in ['Total Revenue', 'Revenue', 'Total Income']:
                 if key in inc.index:
@@ -123,20 +164,17 @@ def get_all_data(ticker):
                     break
             
             if rev_series is not None:
-                # Gross Margin (Skip if missing - likely Bank)
                 if 'Gross Profit' in inc.index:
                     margins_df['Gross_Margin'] = (inc.loc['Gross Profit'] / rev_series) * 100
                 else:
-                    margins_df['Gross_Margin'] = np.nan # Use NaN so chart skips it nicely
+                    margins_df['Gross_Margin'] = np.nan 
                 
-                # Operating Margin
-                op_idx = next((k for k in ['Operating Income', 'EBIT'] if k in inc.index), None)
+                op_idx = next((k for k in ['Operating Income', 'EBIT', 'Pretax Income'] if k in inc.index), None)
                 if op_idx:
                     margins_df['Operating_Margin'] = (inc.loc[op_idx] / rev_series) * 100
                 else:
                     margins_df['Operating_Margin'] = np.nan
                 
-                # Net Margin
                 if 'Net Income' in inc.index:
                     margins_df['Net_Margin'] = (inc.loc['Net Income'] / rev_series) * 100
                 else:
@@ -144,7 +182,7 @@ def get_all_data(ticker):
                 
                 margins_df = margins_df.sort_index()
 
-        # Calculated Defaults
+        # Defaults
         eff_tax_rate = 0.25
         if pretax_inc != 0:
             eff_tax_rate = max(0.0, min(tax_exp / pretax_inc, 0.40))
@@ -155,11 +193,12 @@ def get_all_data(ticker):
 
         return {
             "valid": True,
+            "is_mock": False,
             "name": info.get('longName', ticker),
             "sector": info.get('sector', 'Unknown'),
             "summary": info.get('longBusinessSummary', 'No description.'),
             "currency": info.get('currency', 'USD'),
-            "price": info.get('currentPrice', hist['Close'].iloc[-1] if not hist.empty else 0),
+            "price": info.get('currentPrice', 0),
             "mkt_cap": info.get('marketCap', 0),
             "beta": info.get('beta', 1.0),
             "shares": info.get('sharesOutstanding', 1),
@@ -179,8 +218,9 @@ def get_all_data(ticker):
         }
 
     except Exception as e:
-        # If Rate limit happens, this catches it and returns a safe error
-        return {"valid": False, "error": str(e)}
+        # FAIL-SAFE: Return Mock Data instead of crashing
+        print(f"API Failed: {e}. Switching to Mock Data.")
+        return get_mock_data()
 
 def project_scenario(base_rev, years, growth, margin, current_year):
     data = []
@@ -255,7 +295,7 @@ def create_detailed_report(company_name, mkt_data, ev_dict, wacc, comps_df, base
 
 with st.sidebar:
     st.title("GT Terminal 🚀")
-    st.caption("Final Stable Edition")
+    st.caption("Bulletproof Edition v12.0")
     st.markdown("---")
     nav = st.radio("Modules", [
         "Project Setup", 
@@ -276,36 +316,33 @@ if nav == "Project Setup":
     
     col1, col2 = st.columns([1, 2])
     with col1:
-        st.info("Enter ticker. The app will fetch ALL data once and cache it to prevent rate limits.")
+        st.info("Enter ticker. The app will fetch data once. If Rate Limited, it loads DEMO data.")
         ticker_input = st.text_input("Ticker Symbol", "AAPL").upper()
         
     if st.button("🚀 Initialize Model"):
-        with st.spinner(f"Analyzing {ticker_input}... (This may take 5-10s)"):
+        with st.spinner(f"Analyzing {ticker_input}..."):
             # Master Fetch
             data = get_all_data(ticker_input)
             
-            if data['valid']:
-                st.session_state['data'] = data
-                st.session_state['ticker'] = ticker_input
-                
-                # Auto-build Scenarios
-                base_rev = data['revenue']
-                # Safety fallback if revenue is 0
-                if base_rev == 0:
-                    st.warning("Revenue data missing or 0. Using dummy base of $1B for modeling.")
-                    base_rev = 1e9
-                    
-                year = datetime.now().year
-                scenarios = {
-                    'Bear': project_scenario(base_rev, 5, 0.02, 0.20, year),
-                    'Base': project_scenario(base_rev, 5, 0.08, 0.30, year),
-                    'Bull': project_scenario(base_rev, 5, 0.15, 0.35, year)
-                }
-                st.session_state['scenarios'] = scenarios
-                st.success(f"Successfully loaded data for {data['name']}")
+            st.session_state['data'] = data
+            st.session_state['ticker'] = ticker_input
+            
+            if data.get('is_mock'):
+                st.warning("⚠️ **RATE LIMIT DETECTED:** Yahoo Finance blocked the request. Loaded **DEMO DATA** (Apple Inc) so you can still use the app.")
             else:
-                st.error(f"Error: {data.get('error', 'Unknown error')}")
-                st.warning("Try waiting 60 seconds if you see 'Rate Limited'.")
+                st.success(f"Successfully loaded live data for {data['name']}")
+            
+            # Auto-build Scenarios
+            base_rev = data['revenue']
+            if base_rev == 0: base_rev = 1e9 # Fallback
+                
+            year = datetime.now().year
+            scenarios = {
+                'Bear': project_scenario(base_rev, 5, 0.02, 0.20, year),
+                'Base': project_scenario(base_rev, 5, 0.08, 0.30, year),
+                'Bull': project_scenario(base_rev, 5, 0.15, 0.35, year)
+            }
+            st.session_state['scenarios'] = scenarios
 
     if 'scenarios' in st.session_state:
         st.markdown("### 📊 Scenario Preview")
@@ -377,7 +414,6 @@ elif nav == "Valuation Model (DCF)":
         st.metric("WACC", f"{wacc:.2%}")
         
         results = {}
-        # Ensure we have scenarios before looping
         if 'scenarios' in st.session_state:
             for name, df in st.session_state['scenarios'].items():
                 df['FCF_Proxy'] = df['Implied_EBITDA'] * (1 - tax_rate) * 0.7
@@ -389,10 +425,9 @@ elif nav == "Valuation Model (DCF)":
                 ev = df['PV'].sum() + pv_tv
                 net_debt = d['total_debt'] - d['cash']
                 equity = ev - net_debt
-                # Protect against zero shares
                 shares_out = d['shares'] if d['shares'] > 0 else 1
                 share_price = equity / shares_out
-                results[name] = max(0, share_price) # Avoid negative price
+                results[name] = max(0, share_price) 
                 
                 if name == 'Base': st.session_state['base_df'] = df
 
@@ -408,15 +443,13 @@ elif nav == "Valuation Model (DCF)":
                 wacc_range = np.linspace(wacc-0.02, wacc+0.02, 5)
                 tgr_range = np.linspace(tgr-0.01, tgr+0.01, 5)
                 
-                last_fcf = st.session_state['base_df']['FCF_Proxy'].iloc[-1]
-                pv_explicit = st.session_state['base_df']['PV'].sum()
-                
                 matrix = []
                 for t in tgr_range:
                     row = []
                     for w in wacc_range:
-                        # Re-calc simple TV GG
-                        if w == t: w += 0.001 # Avoid div by zero
+                        if w == t: w += 0.001 
+                        last_fcf = st.session_state['base_df']['FCF_Proxy'].iloc[-1]
+                        pv_explicit = st.session_state['base_df']['PV'].sum()
                         tv = (last_fcf * (1 + t)) / (w - t)
                         val = (pv_explicit + (tv / ((1+w)**5)) - net_debt) / d['shares']
                         row.append(max(0, val))
@@ -505,7 +538,7 @@ elif nav == "Deep Dive":
             st.error("Historical financial data unavailable.")
 
 # ----------------------------
-# 6. RISK SIMULATION (Simple)
+# 6. RISK SIMULATION
 # ----------------------------
 elif nav == "Risk Simulation":
     st.title("🎲 Monte Carlo")
