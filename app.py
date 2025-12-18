@@ -63,16 +63,19 @@ def get_all_data(ticker):
     try:
         stock = yf.Ticker(ticker)
         
-        # 1. Info & Profile
+        # 1. Info & Profile (Lightweight call)
         info = stock.info
         
         # 2. History (Prices)
         hist = stock.history(period="2y")
         
-        # 3. Financial Statements
-        bs = stock.balance_sheet
-        inc = stock.financials
-        cf = stock.cashflow
+        # 3. Financial Statements (Heavy calls - wrapped in try/except)
+        try:
+            bs = stock.balance_sheet
+            inc = stock.financials
+            cf = stock.cashflow
+        except Exception:
+            bs, inc, cf = pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
         
         # 4. Market Data (Risk Free Rate)
         try:
@@ -108,26 +111,36 @@ def get_all_data(ticker):
         if total_debt == 0: total_debt = info.get('totalDebt', 0)
         cash = get_item(bs, ['Cash And Cash Equivalents', 'Cash', 'Cash & Equivalents'])
 
-        # Margins (Historical)
+        # Margins (Historical) - FAULT TOLERANT
         margins_df = None
         if not inc.empty:
             margins_df = pd.DataFrame(index=inc.columns)
             # Revenue
-            rev_series = inc.loc['Total Revenue'] if 'Total Revenue' in inc.index else (inc.loc['Revenue'] if 'Revenue' in inc.index else None)
+            rev_series = None
+            for key in ['Total Revenue', 'Revenue', 'Total Income']:
+                if key in inc.index:
+                    rev_series = inc.loc[key]
+                    break
             
             if rev_series is not None:
                 # Gross Margin (Skip if missing - likely Bank)
                 if 'Gross Profit' in inc.index:
                     margins_df['Gross_Margin'] = (inc.loc['Gross Profit'] / rev_series) * 100
+                else:
+                    margins_df['Gross_Margin'] = np.nan # Use NaN so chart skips it nicely
                 
                 # Operating Margin
                 op_idx = next((k for k in ['Operating Income', 'EBIT'] if k in inc.index), None)
                 if op_idx:
                     margins_df['Operating_Margin'] = (inc.loc[op_idx] / rev_series) * 100
+                else:
+                    margins_df['Operating_Margin'] = np.nan
                 
                 # Net Margin
                 if 'Net Income' in inc.index:
                     margins_df['Net_Margin'] = (inc.loc['Net Income'] / rev_series) * 100
+                else:
+                    margins_df['Net_Margin'] = np.nan
                 
                 margins_df = margins_df.sort_index()
 
@@ -166,6 +179,7 @@ def get_all_data(ticker):
         }
 
     except Exception as e:
+        # If Rate limit happens, this catches it and returns a safe error
         return {"valid": False, "error": str(e)}
 
 def project_scenario(base_rev, years, growth, margin, current_year):
@@ -187,6 +201,55 @@ def calculate_rsi(data, window=14):
     loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
     rs = gain / loss
     return 100 - (100 / (1 + rs))
+
+def create_detailed_report(company_name, mkt_data, ev_dict, wacc, comps_df, base_df):
+    ev_mid = ev_dict.get('Base', 0)
+    ev_low = ev_dict.get('Bear', 0)
+    ev_high = ev_dict.get('Bull', 0)
+    
+    def fmt_curr(x): return f"${x:,.0f}" if isinstance(x, (int, float)) else "N/A"
+    
+    comps_html = comps_df.to_html(classes='table', index=False) if not comps_df.empty else "<p>No peers found.</p>"
+    
+    forecast_html = "<p>No forecast data.</p>"
+    if base_df is not None:
+        display_df = base_df[['Year', 'Revenue', 'EBITDA_Margin', 'Implied_EBITDA']].copy()
+        forecast_html = display_df.to_html(classes='table', index=False, float_format=lambda x: f"{x:,.0f}" if x > 1 else f"{x:.1%}")
+
+    html = f"""
+    <html>
+    <head>
+        <style>
+            body {{ font-family: Helvetica, Arial, sans-serif; color: #333; }}
+            .header {{ border-bottom: 4px solid #8B4513; padding-bottom: 10px; margin-bottom: 30px; }}
+            h1 {{ color: #8B4513; }}
+            table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
+            th {{ background-color: #8B4513; color: white; padding: 8px; }}
+            td {{ border: 1px solid #ddd; padding: 8px; }}
+        </style>
+    </head>
+    <body>
+        <div class="header"><h1>Valuation Report: {company_name}</h1></div>
+        <h3>Base Case EV: {fmt_curr(ev_mid)} | WACC: {wacc:.2%}</h3>
+        <p><strong>Sector:</strong> {mkt_data.get('sector', 'N/A')}</p>
+        <p>{mkt_data.get('summary', '')[:600]}...</p>
+        
+        <h3>Valuation Range</h3>
+        <ul>
+            <li>Bear: {fmt_curr(ev_low)}</li>
+            <li>Base: {fmt_curr(ev_mid)}</li>
+            <li>Bull: {fmt_curr(ev_high)}</li>
+        </ul>
+        
+        <h3>Financial Forecast (Base Case)</h3>
+        {forecast_html}
+        
+        <h3>Peer Analysis</h3>
+        {comps_html}
+    </body>
+    </html>
+    """
+    return html
 
 # --- 3. APP LAYOUT ---
 
@@ -227,8 +290,9 @@ if nav == "Project Setup":
                 
                 # Auto-build Scenarios
                 base_rev = data['revenue']
+                # Safety fallback if revenue is 0
                 if base_rev == 0:
-                    st.warning("Revenue data missing. Using dummy base of $1B.")
+                    st.warning("Revenue data missing or 0. Using dummy base of $1B for modeling.")
                     base_rev = 1e9
                     
                 year = datetime.now().year
@@ -241,7 +305,7 @@ if nav == "Project Setup":
                 st.success(f"Successfully loaded data for {data['name']}")
             else:
                 st.error(f"Error: {data.get('error', 'Unknown error')}")
-                st.warning("Try waiting 60 seconds if 'Rate Limited'.")
+                st.warning("Try waiting 60 seconds if you see 'Rate Limited'.")
 
     if 'scenarios' in st.session_state:
         st.markdown("### 📊 Scenario Preview")
@@ -313,24 +377,54 @@ elif nav == "Valuation Model (DCF)":
         st.metric("WACC", f"{wacc:.2%}")
         
         results = {}
-        for name, df in st.session_state['scenarios'].items():
-            df['FCF_Proxy'] = df['Implied_EBITDA'] * (1 - tax_rate) * 0.7
-            df['PV'] = df['FCF_Proxy'] / [(1+wacc)**i for i in range(1,6)]
-            
-            tv = (df['FCF_Proxy'].iloc[-1] * (1+tgr)) / (wacc-tgr)
-            pv_tv = tv / ((1+wacc)**5)
-            
-            ev = df['PV'].sum() + pv_tv
-            net_debt = d['total_debt'] - d['cash']
-            equity = ev - net_debt
-            share_price = equity / d['shares']
-            results[name] = max(0, share_price) # Avoid negative price
+        # Ensure we have scenarios before looping
+        if 'scenarios' in st.session_state:
+            for name, df in st.session_state['scenarios'].items():
+                df['FCF_Proxy'] = df['Implied_EBITDA'] * (1 - tax_rate) * 0.7
+                df['PV'] = df['FCF_Proxy'] / [(1+wacc)**i for i in range(1,6)]
+                
+                tv = (df['FCF_Proxy'].iloc[-1] * (1+tgr)) / (wacc-tgr)
+                pv_tv = tv / ((1+wacc)**5)
+                
+                ev = df['PV'].sum() + pv_tv
+                net_debt = d['total_debt'] - d['cash']
+                equity = ev - net_debt
+                # Protect against zero shares
+                shares_out = d['shares'] if d['shares'] > 0 else 1
+                share_price = equity / shares_out
+                results[name] = max(0, share_price) # Avoid negative price
+                
+                if name == 'Base': st.session_state['base_df'] = df
 
-        st.subheader("🎯 Implied Share Price")
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Bear", f"${results['Bear']:.2f}")
-        c2.metric("Base", f"${results['Base']:.2f}")
-        c3.metric("Bull", f"${results['Bull']:.2f}")
+            st.subheader("🎯 Implied Share Price")
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Bear", f"${results.get('Bear', 0):.2f}")
+            c2.metric("Base", f"${results.get('Base', 0):.2f}")
+            c3.metric("Bull", f"${results.get('Bull', 0):.2f}")
+
+            # 2D Matrix
+            if 'base_df' in st.session_state:
+                st.subheader("Sensitivity Analysis (Base Case)")
+                wacc_range = np.linspace(wacc-0.02, wacc+0.02, 5)
+                tgr_range = np.linspace(tgr-0.01, tgr+0.01, 5)
+                
+                last_fcf = st.session_state['base_df']['FCF_Proxy'].iloc[-1]
+                pv_explicit = st.session_state['base_df']['PV'].sum()
+                
+                matrix = []
+                for t in tgr_range:
+                    row = []
+                    for w in wacc_range:
+                        # Re-calc simple TV GG
+                        if w == t: w += 0.001 # Avoid div by zero
+                        tv = (last_fcf * (1 + t)) / (w - t)
+                        val = (pv_explicit + (tv / ((1+w)**5)) - net_debt) / d['shares']
+                        row.append(max(0, val))
+                    matrix.append(row)
+                    
+                df_mat = pd.DataFrame(matrix, index=[f"G: {x:.1%}" for x in tgr_range], 
+                                      columns=[f"W: {x:.1%}" for x in wacc_range])
+                st.dataframe(df_mat.style.format("${:.2f}").background_gradient(cmap='RdYlGn', axis=None))
 
 # ----------------------------
 # 4. FINANCIAL HEALTH
@@ -344,7 +438,7 @@ elif nav == "Financial Health":
         d = st.session_state['data']
         
         # Sector Logic
-        is_bank = 'Financial' in d['sector'] or 'Bank' in d['name']
+        is_bank = 'Financial' in d['sector'] or 'Bank' in d['name'] or 'Capital' in d['name']
         
         if is_bank:
             st.warning(f"⚠️ **Sector Notice:** {d['name']} is a Financial Institution.")
@@ -415,10 +509,9 @@ elif nav == "Deep Dive":
 # ----------------------------
 elif nav == "Risk Simulation":
     st.title("🎲 Monte Carlo")
-    if 'scenarios' not in st.session_state:
+    if 'data' not in st.session_state:
         st.warning("Please initialize in 'Project Setup' first.")
     else:
-        # Simple simulation based on random price movement
         curr_price = st.session_state['data']['price']
         vol = st.slider("Volatility", 0.1, 0.5, 0.2)
         sims = st.selectbox("Iterations", [1000, 5000])
@@ -439,16 +532,17 @@ elif nav == "Peer Analysis":
     if st.button("Compare"):
         tickers = [t.strip().upper() for t in peers.split(",")]
         rows = []
-        for t in tickers:
-            try:
-                i = yf.Ticker(t).info
-                rows.append({
-                    "Ticker": t,
-                    "P/E": i.get('trailingPE', 0),
-                    "ROE": i.get('returnOnEquity', 0),
-                    "Debt/Eq": i.get('debtToEquity', 0)
-                })
-            except: pass
+        with st.spinner("Fetching peers..."):
+            for t in tickers:
+                try:
+                    i = yf.Ticker(t).info
+                    rows.append({
+                        "Ticker": t,
+                        "P/E": i.get('trailingPE', 0),
+                        "ROE": i.get('returnOnEquity', 0),
+                        "Debt/Eq": i.get('debtToEquity', 0)
+                    })
+                except: pass
         
         if rows:
             df = pd.DataFrame(rows)
