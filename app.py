@@ -8,7 +8,7 @@ from io import BytesIO
 from datetime import datetime
 from textblob import TextBlob
 
-# --- 1. CONFIGURATION & STYLING (PRO UPGRADE) ---
+# --- 1. CONFIGURATION & STYLING (HIGH CONTRAST EDITION) ---
 st.set_page_config(page_title="GT Valuation Terminal", page_icon="💎", layout="wide")
 
 st.markdown("""
@@ -22,15 +22,45 @@ st.markdown("""
         font-family: 'Inter', sans-serif;
     }
 
-    /* HEADERS */
+    /* TYPOGRAPHY - HIGH CONTRAST */
     h1, h2, h3 { 
         color: #f0f2f6 !important; 
         font-weight: 700 !important;
         letter-spacing: -0.5px;
     }
-    h1 { font-size: 2.5rem !important; background: -webkit-linear-gradient(45deg, #c9a66b, #f5d79b); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-    h2 { font-size: 1.8rem !important; border-bottom: 2px solid #333; padding-bottom: 10px; margin-top: 30px; }
+    h1 { 
+        font-size: 2.5rem !important; 
+        background: -webkit-linear-gradient(45deg, #c9a66b, #f5d79b); 
+        -webkit-background-clip: text; 
+        -webkit-text-fill-color: transparent; 
+        text-shadow: 0px 0px 20px rgba(201, 166, 107, 0.3);
+    }
+    h2 { font-size: 1.8rem !important; border-bottom: 2px solid #30363d; padding-bottom: 10px; margin-top: 30px; }
     h3 { font-size: 1.4rem !important; color: #c9a66b !important; }
+    
+    /* FIX: GENERAL TEXT VISIBILITY */
+    p, li, span, div {
+        color: #e6edf3; /* Bright Silver-White */
+    }
+
+    /* FIX: LABELS (Input Titles) */
+    label, .stTextInput label, .stNumberInput label {
+        color: #ffffff !important; /* Pure White */
+        font-weight: 600 !important;
+        font-size: 0.95rem !important;
+        letter-spacing: 0.5px;
+    }
+
+    /* FIX: ALERT/INFO BOXES (The blue box in your screenshot) */
+    div[data-testid="stAlert"] {
+        background-color: rgba(20, 26, 35, 0.8) !important; /* Dark Glassy Background */
+        border: 1px solid #3b82f6 !important; /* Bright Blue Border */
+        color: #ffffff !important; /* Force White Text */
+    }
+    div[data-testid="stAlert"] p {
+        color: #ffffff !important; /* Ensure paragraph text inside alert is white */
+        font-weight: 500;
+    }
 
     /* SIDEBAR */
     section[data-testid="stSidebar"] { 
@@ -55,8 +85,8 @@ st.markdown("""
     
     /* INPUT FIELDS */
     .stTextInput>div>div>input, .stNumberInput>div>div>input { 
-        color: #e6edf3 !important; 
-        background-color: #0d1117 !important; 
+        color: #ffffff !important; /* White Text Input */
+        background-color: #0d1117 !important; /* Dark Input Background */
         border: 1px solid #30363d !important; 
         border-radius: 6px;
     }
@@ -68,10 +98,10 @@ st.markdown("""
     /* BUTTONS */
     .stButton>button {
         background: linear-gradient(135deg, #c9a66b 0%, #a6854e 100%);
-        color: #0e1117 !important;
+        color: #000000 !important; /* Black text on Gold button for contrast */
         border: none;
         border-radius: 8px;
-        font-weight: 700;
+        font-weight: 800;
         padding: 0.6rem 1.2rem;
         transition: all 0.3s ease;
         text-transform: uppercase;
@@ -81,30 +111,22 @@ st.markdown("""
     .stButton>button:hover { 
         transform: translateY(-2px);
         box-shadow: 0 6px 20px rgba(201, 166, 107, 0.5);
-    }
-    
-    /* DATAFRAMES */
-    [data-testid="stDataFrame"] { 
-        border: 1px solid #30363d; 
-        border-radius: 8px;
-        overflow: hidden;
+        color: #000000 !important;
     }
     
     /* TABS */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 20px;
-    }
+    .stTabs [data-baseweb="tab-list"] { gap: 20px; }
     .stTabs [data-baseweb="tab"] {
         height: 50px;
         white-space: pre-wrap;
         background-color: transparent;
         border-radius: 4px;
-        color: #8b949e;
+        color: #8b949e; /* Dimmed Tab */
         font-weight: 600;
     }
     .stTabs [aria-selected="true"] {
         background-color: rgba(201, 166, 107, 0.1);
-        color: #c9a66b;
+        color: #c9a66b; /* Gold Selected Tab */
         border-bottom: 2px solid #c9a66b;
     }
     
@@ -269,9 +291,9 @@ def calculate_technical_indicators(df):
 
 with st.sidebar:
     st.title("GT Terminal")
-    st.markdown("`PROFESSIONAL SUITE V12.3`")
+    st.markdown("`PROFESSIONAL SUITE V12.4`")
     st.markdown("---")
-    nav = st.radio("NAVIAGATION", [
+    nav = st.radio("NAVIGATION", [
         "Project Setup", 
         "Live Market Data", 
         "Valuation Model (DCF)", 
