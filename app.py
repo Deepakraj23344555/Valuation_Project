@@ -208,7 +208,7 @@ def calculate_technical_indicators(df):
 # SIDEBAR NAV
 with st.sidebar:
     st.title("GT Terminal 🚀")
-    st.caption("Professional Edition v12.0 (3D Enabled)")
+    st.caption("Professional Edition v12.1 (Patched)")
     st.markdown("---")
     nav = st.radio("Modules", [
         "Project Setup", 
@@ -220,7 +220,7 @@ with st.sidebar:
     ])
     st.markdown("---")
     
-    # --- NEW FEATURE: REPORT GENERATOR ---
+    # --- REPORT GENERATOR (FIXED) ---
     st.subheader("🖨️ Report Center")
     if 'data' in st.session_state and 'results' in st.session_state:
         d = st.session_state['data']
@@ -252,16 +252,25 @@ with st.sidebar:
         
         st.download_button("📄 Download Summary (.txt)", report_text, f"{d['name']}_Report.txt")
         
-        # Data Dump
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            d['hist'].to_excel(writer, sheet_name='Price_History')
-            pd.DataFrame([d]).astype(str).to_excel(writer, sheet_name='Fundamentals')
-            if 'scenarios' in st.session_state:
-                for k, v in st.session_state['scenarios'].items():
-                    v.to_excel(writer, sheet_name=f'{k}_Case')
-        
-        st.download_button("📊 Download Data (.xlsx)", output.getvalue(), f"{d['name']}_Data.xlsx")
+        # Excel Data Dump (With Error Handling)
+        try:
+            import xlsxwriter # Lazy import to check existence
+            
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                d['hist'].to_excel(writer, sheet_name='Price_History')
+                pd.DataFrame([d]).astype(str).to_excel(writer, sheet_name='Fundamentals')
+                if 'scenarios' in st.session_state:
+                    for k, v in st.session_state['scenarios'].items():
+                        v.to_excel(writer, sheet_name=f'{k}_Case')
+            
+            st.download_button("📊 Download Data (.xlsx)", output.getvalue(), f"{d['name']}_Data.xlsx")
+            
+        except ImportError:
+            st.error("⚠️ **Dependency Missing:** Please install `xlsxwriter` to enable Excel downloads.")
+            st.code("pip install xlsxwriter", language="bash")
+        except Exception as e:
+            st.error(f"Export Error: {e}")
         
     elif 'data' in st.session_state:
         st.caption("Run Valuation to enable full report.")
@@ -270,7 +279,7 @@ with st.sidebar:
 
 
 # ----------------------------
-# 1. PROJECT SETUP (ENHANCED)
+# 1. PROJECT SETUP
 # ----------------------------
 if nav == "Project Setup":
     st.title("📂 Project Initialization")
@@ -353,7 +362,7 @@ if nav == "Project Setup":
             temp['Case'] = k
             combined = pd.concat([combined, temp])
         
-        # NEW: 3D Visualization of Scenarios
+        # 3D Visualization of Scenarios
         fig = px.scatter_3d(combined, x='Year', y='Case', z='Revenue',
                             color='Case', size='Implied_EBITDA',
                             color_discrete_map={'Bear':'#ef553b', 'Base':'#f1c40f', 'Bull':'#00cc96'})
@@ -418,7 +427,7 @@ elif nav == "Live Market Data":
             st.info("News feed unavailable.")
 
 # ----------------------------
-# 3. VALUATION (DCF) (ENHANCED)
+# 3. VALUATION (DCF)
 # ----------------------------
 elif nav == "Valuation Model (DCF)":
     st.title("💎 Intrinsic Valuation")
@@ -493,7 +502,7 @@ elif nav == "Valuation Model (DCF)":
         fig.update_layout(title="Valuation Range", height=300, paper_bgcolor='rgba(0,0,0,0)', font=dict(color='#e0e0e0'))
         st.plotly_chart(fig, use_container_width=True)
         
-        # --- NEW: 3D SENSITIVITY MATRIX ---
+        # --- SENSITIVITY MATRIX (3D) ---
         st.subheader("Sensitivity Analysis (3D Surface)")
         st.caption("Visualizing Valuation impact based on WACC (X) and Terminal Growth (Y)")
         
