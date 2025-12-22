@@ -38,12 +38,12 @@ st.markdown("""
     h2 { font-size: 1.8rem !important; border-bottom: 2px solid #30363d; padding-bottom: 10px; margin-top: 30px; }
     h3 { font-size: 1.4rem !important; color: #c9a66b !important; }
     
-    /* FIX: GENERAL TEXT VISIBILITY */
+    /* GENERAL TEXT VISIBILITY */
     p, li, span, div {
         color: #e6edf3; /* Bright Silver-White */
     }
 
-    /* FIX: LABELS (Input Titles) */
+    /* LABELS (Input Titles) */
     label, .stTextInput label, .stNumberInput label {
         color: #ffffff !important; /* Pure White */
         font-weight: 600 !important;
@@ -51,14 +51,14 @@ st.markdown("""
         letter-spacing: 0.5px;
     }
 
-    /* FIX: ALERT/INFO BOXES (The blue box in your screenshot) */
+    /* ALERT/INFO BOXES */
     div[data-testid="stAlert"] {
-        background-color: rgba(20, 26, 35, 0.8) !important; /* Dark Glassy Background */
-        border: 1px solid #3b82f6 !important; /* Bright Blue Border */
-        color: #ffffff !important; /* Force White Text */
+        background-color: rgba(20, 26, 35, 0.8) !important; 
+        border: 1px solid #3b82f6 !important; 
+        color: #ffffff !important; 
     }
     div[data-testid="stAlert"] p {
-        color: #ffffff !important; /* Ensure paragraph text inside alert is white */
+        color: #ffffff !important;
         font-weight: 500;
     }
 
@@ -86,7 +86,7 @@ st.markdown("""
     /* INPUT FIELDS */
     .stTextInput>div>div>input, .stNumberInput>div>div>input { 
         color: #ffffff !important; /* White Text Input */
-        background-color: #0d1117 !important; /* Dark Input Background */
+        background-color: #0d1117 !important; 
         border: 1px solid #30363d !important; 
         border-radius: 6px;
     }
@@ -98,7 +98,7 @@ st.markdown("""
     /* BUTTONS */
     .stButton>button {
         background: linear-gradient(135deg, #c9a66b 0%, #a6854e 100%);
-        color: #000000 !important; /* Black text on Gold button for contrast */
+        color: #000000 !important; /* Black text on Gold */
         border: none;
         border-radius: 8px;
         font-weight: 800;
@@ -121,12 +121,12 @@ st.markdown("""
         white-space: pre-wrap;
         background-color: transparent;
         border-radius: 4px;
-        color: #8b949e; /* Dimmed Tab */
+        color: #8b949e; 
         font-weight: 600;
     }
     .stTabs [aria-selected="true"] {
         background-color: rgba(201, 166, 107, 0.1);
-        color: #c9a66b; /* Gold Selected Tab */
+        color: #c9a66b; 
         border-bottom: 2px solid #c9a66b;
     }
     
@@ -154,7 +154,7 @@ def get_financial_data(ticker):
         stock = yf.Ticker(ticker)
         info = stock.info
         
-        # 1. Price History (Excel Fix Applied)
+        # 1. Price History (Timezone Fix Applied)
         hist = stock.history(period="2y")
         if not hist.empty:
             hist.index = hist.index.tz_localize(None)
@@ -291,7 +291,7 @@ def calculate_technical_indicators(df):
 
 with st.sidebar:
     st.title("GT Terminal")
-    st.markdown("`PROFESSIONAL SUITE V12.4`")
+    st.markdown("`PROFESSIONAL SUITE V12.5`")
     st.markdown("---")
     nav = st.radio("NAVIGATION", [
         "Project Setup", 
@@ -464,19 +464,41 @@ elif nav == "Live Market Data":
         st.subheader("Sentiment Analysis")
         try:
             if st.session_state.get('ticker') != "CUSTOM":
-                news = yf.Ticker(st.session_state['ticker']).news
+                # Create Ticker Object
+                ticker_obj = yf.Ticker(st.session_state['ticker'])
+                news = ticker_obj.news
+                
                 if news:
-                    for n in news[:3]:
-                        blob = TextBlob(n['title'])
+                    counter = 0
+                    for n in news:
+                        if counter >= 3: break
+                        
+                        title = n.get('title', 'No Title')
+                        link = n.get('link', '#')
+                        
+                        # Perform Sentiment Analysis
+                        blob = TextBlob(title)
                         score = blob.sentiment.polarity
-                        color = "#00cc96" if score > 0.1 else "#ef553b" if score < -0.1 else "#8b949e"
-                        st.markdown(f"<span style='color:{color}; font-weight:bold;'>●</span> [{n['title']}]({n['link']})", unsafe_allow_html=True)
+                        
+                        if score > 0.1: color = "#00cc96" 
+                        elif score < -0.1: color = "#ef553b" 
+                        else: color = "#8b949e" 
+                            
+                        st.markdown(
+                            f"""
+                            <div style="background-color: rgba(22, 27, 34, 0.5); padding: 10px; border-radius: 5px; margin-bottom: 10px; border-left: 4px solid {color};">
+                                <a href="{link}" target="_blank" style="color: #e6edf3; text-decoration: none; font-weight: 600;">{title}</a>
+                            </div>
+                            """, 
+                            unsafe_allow_html=True
+                        )
+                        counter += 1
                 else:
-                    st.info("No news feed available.")
+                    st.info("No recent news found for this ticker.")
             else:
                 st.info("News disabled for custom data.")
-        except:
-            st.info("News feed unavailable.")
+        except Exception as e:
+            st.error(f"News Error: {e}")
 
 # ----------------------------
 # 3. VALUATION (DCF)
