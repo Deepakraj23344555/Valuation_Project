@@ -64,6 +64,12 @@ def get_financial_data(ticker):
         
         # 1. Price History
         hist = stock.history(period="2y")
+        
+        # --- FIX: REMOVE TIMEZONE FOR EXCEL COMPATIBILITY ---
+        if not hist.empty:
+            hist.index = hist.index.tz_localize(None)
+        # ----------------------------------------------------
+
         try:
             rf_rate = yf.Ticker("^TNX").history(period="1d")['Close'].iloc[-1] / 100
         except:
@@ -208,7 +214,7 @@ def calculate_technical_indicators(df):
 # SIDEBAR NAV
 with st.sidebar:
     st.title("GT Terminal 🚀")
-    st.caption("Professional Edition v12.1 (Patched)")
+    st.caption("Professional Edition v12.2 (Excel Fix)")
     st.markdown("---")
     nav = st.radio("Modules", [
         "Project Setup", 
@@ -220,7 +226,7 @@ with st.sidebar:
     ])
     st.markdown("---")
     
-    # --- REPORT GENERATOR (FIXED) ---
+    # --- REPORT GENERATOR ---
     st.subheader("🖨️ Report Center")
     if 'data' in st.session_state and 'results' in st.session_state:
         d = st.session_state['data']
@@ -252,12 +258,13 @@ with st.sidebar:
         
         st.download_button("📄 Download Summary (.txt)", report_text, f"{d['name']}_Report.txt")
         
-        # Excel Data Dump (With Error Handling)
+        # Excel Data Dump
         try:
-            import xlsxwriter # Lazy import to check existence
+            import xlsxwriter
             
             output = BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                # 'hist' has been sanitized in get_financial_data, so this is now safe
                 d['hist'].to_excel(writer, sheet_name='Price_History')
                 pd.DataFrame([d]).astype(str).to_excel(writer, sheet_name='Fundamentals')
                 if 'scenarios' in st.session_state:
@@ -267,7 +274,7 @@ with st.sidebar:
             st.download_button("📊 Download Data (.xlsx)", output.getvalue(), f"{d['name']}_Data.xlsx")
             
         except ImportError:
-            st.error("⚠️ **Dependency Missing:** Please install `xlsxwriter` to enable Excel downloads.")
+            st.error("⚠️ **Dependency Missing:** Please install `xlsxwriter`.")
             st.code("pip install xlsxwriter", language="bash")
         except Exception as e:
             st.error(f"Export Error: {e}")
