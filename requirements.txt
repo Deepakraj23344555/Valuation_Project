@@ -3,8 +3,5 @@ pandas
 numpy
 plotly
 yfinance>=0.2.40
-openpyxl
-statsmodels
 textblob
-matplotlib
 xlsxwriter
