@@ -18,19 +18,19 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;700;800&display=swap');
 
     /* --------------------------------------------------------
-       1. MAIN SCREEN -> PREMIUM BROWN
+       1. MAIN SCREEN -> PREMIUM ESPRESSO BROWN
        -------------------------------------------------------- */
     .stApp { 
-        background-color: #161311; /* Deep Espresso Brown */
+        background-color: #161311; 
         font-family: 'Manrope', sans-serif;
-        color: #e6e0d4; /* Warm White Text */
+        color: #e6e0d4; 
     }
 
     /* --------------------------------------------------------
-       2. SIDEBAR -> PREMIUM BLUE
+       2. SIDEBAR -> PREMIUM MIDNIGHT BLUE
        -------------------------------------------------------- */
     section[data-testid="stSidebar"] {
-        background-color: #0B1221; /* Deep Midnight Blue */
+        background-color: #0B1221; 
         border-right: 1px solid #1E293B;
     }
     
@@ -45,12 +45,12 @@ st.markdown("""
     }
 
     /* --------------------------------------------------------
-       3. NAVBAR (Glassy Brown)
+       3. TOP NAVIGATION BAR (Where the Name Goes)
        -------------------------------------------------------- */
     .nav-container {
-        background: rgba(22, 19, 17, 0.9); /* Semi-transparent Brown */
+        background: rgba(22, 19, 17, 0.95); /* Matches Main Brown */
         backdrop-filter: blur(12px);
-        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         padding: 1rem 2rem;
         position: fixed;
         top: 0; left: 0; right: 0;
@@ -60,11 +60,14 @@ st.markdown("""
         align-items: center;
         box-shadow: 0 4px 20px rgba(0,0,0,0.4);
     }
+    
+    /* THE BRAND NAME STYLING */
     .nav-logo {
-        font-size: 1.6rem;
+        font-size: 1.8rem; /* Large Size */
         font-weight: 800;
-        letter-spacing: 1px;
+        letter-spacing: 2px;
         color: white;
+        text-transform: uppercase;
     }
     .nav-logo span { 
         background: linear-gradient(90deg, #D4AF37 0%, #F2D06B 100%); /* Gold Gradient */
@@ -72,13 +75,14 @@ st.markdown("""
         -webkit-text-fill-color: transparent;
     }
     
-    .block-container { padding-top: 7rem !important; }
+    /* Push content down so it's not hidden behind navbar */
+    .block-container { padding-top: 6rem !important; }
 
     /* --------------------------------------------------------
        4. CARDS (Lighter Brown for Contrast)
        -------------------------------------------------------- */
     div[data-testid="metric-container"] {
-        background: #1F1B18; /* Slightly lighter brown card */
+        background: #1F1B18; 
         border: 1px solid #332D28;
         border-radius: 8px;
         padding: 20px;
@@ -108,11 +112,11 @@ st.markdown("""
     h1 { color: #ffffff !important; font-weight: 800; letter-spacing: -0.5px; }
     h2 { color: #e6e0d4 !important; border-bottom: 1px solid #332D28; padding-bottom: 10px; margin-top: 30px; }
     h3 { color: #D4AF37 !important; font-size: 1.2rem; font-weight: 700; margin-top: 20px; }
-    p, li, label, span { color: #dcd6cc; } /* Warm grey text */
+    p, li, label, span { color: #dcd6cc; } 
 
-    /* INPUTS (Dark Blue/Grey mix to pop on Brown) */
+    /* INPUTS */
     .stTextInput>div>div>input, .stNumberInput>div>div>input {
-        background-color: #0F1218 !important; /* Very dark blue-black input */
+        background-color: #0F1218 !important; 
         color: white !important;
         border: 1px solid #332D28 !important;
         border-radius: 6px;
@@ -125,7 +129,7 @@ st.markdown("""
 
     /* BUTTONS (Gold Gradient) */
     .stButton>button {
-        background: linear-gradient(90deg, #C5A059 0%, #9A7B3E 100%); /* Muted classy gold */
+        background: linear-gradient(90deg, #C5A059 0%, #9A7B3E 100%); 
         color: #000000 !important;
         font-weight: 800;
         border: none;
@@ -157,8 +161,9 @@ st.markdown("""
     
     <div class="nav-container">
         <div class="nav-logo">DEBIN <span>CAPITAL</span></div>
+        
         <div style="display:flex; gap:20px; align-items:center;">
-             <span style="font-size:0.8rem; color:#A89F91; font-weight:600; letter-spacing:1px;">PREMIUM ANALYTICS</span>
+             <span style="font-size:0.8rem; color:#A89F91; font-weight:600; letter-spacing:1px;">INSTITUTIONAL SUITE</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -375,7 +380,6 @@ elif nav == "Market Data":
         if not d['hist'].empty:
             hist = calculate_technical_indicators(d['hist'].copy())
             fig = go.Figure()
-            # Modern Candles
             fig.add_trace(go.Candlestick(x=hist.index, open=hist['Open'], high=hist['High'], low=hist['Low'], close=hist['Close'], name='Price',
                                          increasing_line_color='#69F0AE', decreasing_line_color='#FF5252'))
             if 'SMA_50' in hist.columns:
