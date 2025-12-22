@@ -9,26 +9,28 @@ from datetime import datetime
 from textblob import TextBlob
 import feedparser
 
-# --- 1. CONFIGURATION & WEBSITE-LIKE STYLING ---
-st.set_page_config(page_title="DEBIN CAPITAL | Valuation Suite", page_icon="🏛️", layout="wide")
+# --- 1. CONFIGURATION & QUANT-LUXURY STYLING ---
+st.set_page_config(page_title="DEBIN CAPITAL | Quant Terminal", page_icon="🏛️", layout="wide")
 
 st.markdown("""
     <style>
-    /* IMPORT FONTS */
-    @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;600;700;800&display=swap');
+    /* IMPORT FONTS: Manrope for modernity */
+    @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;700;800&display=swap');
 
-    /* RESET & BODY */
+    /* RESET & BODY - DEEP OBSIDIAN BACKGROUND */
     .stApp { 
-        background-color: #0b0e11; /* Ultra Dark Blue-Black */
+        background-color: #050505; 
         font-family: 'Manrope', sans-serif;
+        color: #e0e0e0;
     }
 
     /* --------------------------
-       CUSTOM NAVBAR (Top Banner)
+       NAVBAR (Glassy & Floating)
        -------------------------- */
     .nav-container {
-        background: rgba(13, 17, 23, 0.95);
-        border-bottom: 1px solid #30363d;
+        background: rgba(5, 5, 5, 0.8);
+        backdrop-filter: blur(12px);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         padding: 1rem 2rem;
         position: fixed;
         top: 0;
@@ -38,129 +40,138 @@ st.markdown("""
         display: flex;
         justify-content: space-between;
         align-items: center;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.4);
     }
     .nav-logo {
-        font-size: 1.5rem;
+        font-size: 1.6rem;
         font-weight: 800;
-        color: #ffffff;
-        letter-spacing: 1.5px;
+        letter-spacing: 1px;
+        color: white;
     }
-    .nav-logo span { color: #d4af37; } /* Gold Accent */
+    /* GRADIENT TEXT FOR LOGO */
+    .nav-logo span { 
+        background: linear-gradient(90deg, #D4AF37 0%, #F2D06B 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
     
-    /* Push content down so it's not hidden behind navbar */
-    .block-container {
-        padding-top: 6rem !important; 
-    }
+    .block-container { padding-top: 7rem !important; }
 
     /* --------------------------
-       CARD STYLING (Glassmorphism)
+       CARDS (Interactive Glow)
        -------------------------- */
+    div[data-testid="metric-container"] {
+        background: rgba(20, 20, 20, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 12px;
+        padding: 20px;
+        transition: all 0.3s ease;
+    }
+    div[data-testid="metric-container"]:hover {
+        border-color: #00E5FF; /* NEON TEAL GLOW ON HOVER */
+        box-shadow: 0 0 15px rgba(0, 229, 255, 0.15);
+        transform: translateY(-3px);
+    }
     div[data-testid="stMetricValue"] {
-        font-size: 1.8rem !important;
-        color: #d4af37 !important; /* Gold Numbers */
+        color: #ffffff !important;
         font-weight: 700 !important;
+        font-size: 2rem !important;
     }
     div[data-testid="stMetricLabel"] {
-        font-size: 0.9rem !important;
-        color: #8b949e !important;
-        letter-spacing: 0.5px;
+        color: #00E5FF !important; /* TEAL LABELS */
+        font-size: 0.85rem !important;
+        font-weight: 600 !important;
+        letter-spacing: 1px;
         text-transform: uppercase;
-    }
-    
-    /* --------------------------
-       TYPOGRAPHY - HIGH CONTRAST
-       -------------------------- */
-    h1 { 
-        color: #ffffff !important; 
-        font-weight: 800; 
-        font-size: 2.2rem;
-        margin-bottom: 1rem;
-        letter-spacing: -0.5px;
-    }
-    h2 { 
-        color: #e6edf3 !important; 
-        font-size: 1.6rem; 
-        border-bottom: 1px solid #30363d; 
-        padding-bottom: 10px; 
-        margin-top: 30px;
-    }
-    h3 { 
-        color: #d4af37 !important; 
-        font-size: 1.2rem; 
-        margin-top: 20px; 
-        font-weight: 700;
-    }
-    p, li, span, label { 
-        color: #e6edf3 !important; /* Bright Silver/White Text */
-        font-size: 1rem; 
-        line-height: 1.6; 
     }
 
     /* --------------------------
-       INPUTS & BUTTONS
+       TYPOGRAPHY & HEADERS
+       -------------------------- */
+    h1 { 
+        font-weight: 800; 
+        color: white !important; 
+        margin-bottom: 0.5rem;
+    }
+    h2 { 
+        color: #F2D06B !important; /* Soft Gold */
+        font-size: 1.4rem; 
+        border-bottom: 1px solid rgba(255,255,255,0.1); 
+        padding-bottom: 10px;
+        margin-top: 30px;
+    }
+    h3 { color: #00E5FF !important; font-size: 1.1rem; font-weight: 700; margin-top: 15px; }
+    p, li, label, span { color: #cfcfcf !important; }
+
+    /* --------------------------
+       CUSTOM INPUTS & BUTTONS
        -------------------------- */
     .stTextInput>div>div>input, .stNumberInput>div>div>input {
-        background-color: #161b22 !important;
-        color: #ffffff !important;
-        border: 1px solid #30363d !important;
-        border-radius: 6px;
-        height: 45px;
+        background-color: #0F0F0F !important;
+        color: white !important;
+        border: 1px solid #333 !important;
+        border-radius: 8px;
+        height: 50px;
         font-weight: 600;
     }
     .stTextInput>div>div>input:focus, .stNumberInput>div>div>input:focus {
-        border-color: #d4af37 !important;
-        box-shadow: 0 0 0 1px #d4af37 !important;
+        border-color: #00E5FF !important; /* TEAL FOCUS */
+        box-shadow: 0 0 0 1px #00E5FF !important;
     }
 
+    /* GRADIENT BUTTON */
     .stButton>button {
-        background: linear-gradient(90deg, #d4af37 0%, #aa8a30 100%);
-        color: #000000 !important;
+        background: linear-gradient(90deg, #D4AF37 0%, #B8860B 100%);
+        color: black !important;
         font-weight: 800;
         border: none;
-        padding: 0.6rem 1.5rem;
-        border-radius: 6px;
+        padding: 0.7rem 2rem;
+        border-radius: 8px;
         text-transform: uppercase;
         letter-spacing: 1px;
+        box-shadow: 0 4px 15px rgba(212, 175, 55, 0.3);
         transition: all 0.3s ease;
     }
     .stButton>button:hover {
-        box-shadow: 0 0 20px rgba(212, 175, 55, 0.4);
-        transform: translateY(-2px);
+        transform: scale(1.02);
+        box-shadow: 0 6px 20px rgba(212, 175, 55, 0.5);
     }
 
     /* --------------------------
        SIDEBAR & TABS
        -------------------------- */
     section[data-testid="stSidebar"] {
-        background-color: #0d1117;
-        border-right: 1px solid #21262d;
+        background-color: #000000;
+        border-right: 1px solid #222;
     }
     .stTabs [data-baseweb="tab"] {
-        color: #8b949e;
+        color: #777;
         font-weight: 600;
+        padding-bottom: 10px;
     }
     .stTabs [aria-selected="true"] {
-        color: #d4af37;
-        border-bottom-color: #d4af37;
+        color: #00E5FF;
+        border-bottom-color: #00E5FF;
     }
     
     /* --------------------------
        FOOTER
        -------------------------- */
     .footer {
-        margin-top: 80px;
-        border-top: 1px solid #30363d;
-        padding-top: 30px;
+        margin-top: 100px;
+        border-top: 1px solid #222;
+        padding: 40px 0;
         text-align: center;
-        color: #6e7681 !important;
+        color: #555 !important;
         font-size: 0.8rem;
     }
     </style>
     
     <div class="nav-container">
         <div class="nav-logo">DEBIN <span>CAPITAL</span></div>
-        <div style="color: #8b949e; font-size: 0.85rem; font-weight: 600;">INSTITUTIONAL ANALYTICS v1.0</div>
+        <div style="display:flex; gap:20px; align-items:center;">
+             <span style="font-size:0.8rem; color:#666; font-weight:600; letter-spacing:1px;">QUANTITATIVE SUITE</span>
+             <div style="width:8px; height:8px; background:#00E5FF; border-radius:50%; box-shadow:0 0 10px #00E5FF;"></div>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -179,7 +190,6 @@ def get_financial_data(ticker):
         stock = yf.Ticker(ticker)
         info = stock.info
         
-        # History with Timezone Fix
         hist = stock.history(period="2y")
         if not hist.empty: hist.index = hist.index.tz_localize(None)
 
@@ -267,7 +277,6 @@ def calculate_technical_indicators(df):
 
 # --- 3. MAIN UI LAYOUT ---
 
-# SIDEBAR NAVIGATION
 with st.sidebar:
     st.markdown("### 🧭 MENU")
     nav = st.radio("", ["Dashboard", "Market Data", "Valuation (DCF)", "Comps Analysis", "Risk Engine", "Health Check"])
@@ -276,10 +285,8 @@ with st.sidebar:
     st.markdown("### 📥 ACTIONS")
     if 'data' in st.session_state:
         d = st.session_state['data']
-        # EXPORT BUTTONS
         report_text = f"DEBIN CAPITAL REPORT\nTarget: {d['name']}\nDate: {datetime.now()}"
         st.download_button("📄 Report (.txt)", report_text, file_name=f"{d['name']}_Report.txt")
-        
         try:
             import xlsxwriter
             output = BytesIO()
@@ -337,7 +344,7 @@ if nav == "Dashboard":
         st.markdown("### 🔭 Strategic Forecast Visualization")
         combined = pd.concat([v.assign(Case=k) for k,v in st.session_state['scenarios'].items()])
         fig = px.scatter_3d(combined, x='Year', y='Case', z='Revenue', color='Case', size='Implied_EBITDA',
-                            color_discrete_map={'Bear':'#ef553b', 'Base':'#f1c40f', 'Bull':'#00cc96'})
+                            color_discrete_map={'Bear':'#FF5252', 'Base':'#FFD740', 'Bull':'#69F0AE'})
         fig.update_layout(scene=dict(xaxis_title='Year', yaxis_title='Scenario', zaxis_title='Revenue ($)'),
                           margin=dict(l=0,r=0,b=0,t=0), height=500, paper_bgcolor='rgba(0,0,0,0)',
                           font=dict(color='#e6edf3'))
@@ -360,10 +367,12 @@ elif nav == "Market Data":
         if not d['hist'].empty:
             hist = calculate_technical_indicators(d['hist'].copy())
             fig = go.Figure()
-            fig.add_trace(go.Candlestick(x=hist.index, open=hist['Open'], high=hist['High'], low=hist['Low'], close=hist['Close'], name='Price'))
-            fig.add_trace(go.Scatter(x=hist.index, y=hist['SMA_50'], line=dict(color='#f1c40f', width=1), name='SMA 50'))
+            # TEAL & WHITE CANDLES FOR MODERN LOOK
+            fig.add_trace(go.Candlestick(x=hist.index, open=hist['Open'], high=hist['High'], low=hist['Low'], close=hist['Close'], name='Price',
+                                         increasing_line_color='#00E5FF', decreasing_line_color='#FF5252'))
+            fig.add_trace(go.Scatter(x=hist.index, y=hist['SMA_50'], line=dict(color='#D4AF37', width=1), name='SMA 50'))
             fig.update_layout(height=500, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
-                              font=dict(color='#e6edf3'), xaxis=dict(showgrid=False), yaxis=dict(showgrid=True, gridcolor='#30363d'))
+                              font=dict(color='#e6edf3'), xaxis=dict(showgrid=False), yaxis=dict(showgrid=True, gridcolor='#222'))
             st.plotly_chart(fig, use_container_width=True)
         
         # RSS NEWS FEED
@@ -376,11 +385,12 @@ elif nav == "Market Data":
                     for e in feed.entries[:4]:
                         blob = TextBlob(e.title)
                         score = blob.sentiment.polarity
-                        color = "#00cc96" if score > 0.1 else "#ef553b" if score < -0.1 else "#8b949e"
+                        # CUSTOM COLORS FOR NEWS
+                        color = "#00E5FF" if score > 0.1 else "#FF5252" if score < -0.1 else "#888"
                         st.markdown(f"""
-                        <div style="background:rgba(22, 27, 34, 0.6); padding:15px; border-radius:8px; border-left:4px solid {color}; margin-bottom:10px;">
+                        <div style="background:rgba(20, 20, 20, 0.8); padding:15px; border-radius:8px; border-left:4px solid {color}; margin-bottom:10px;">
                             <a href="{e.link}" target="_blank" style="color:white; text-decoration:none; font-weight:700;">{e.title}</a>
-                            <div style="font-size:0.8rem; color:#8b949e; margin-top:5px;">{e.published[:16] if 'published' in e else 'Just Now'}</div>
+                            <div style="font-size:0.8rem; color:#888; margin-top:5px;">{e.published[:16] if 'published' in e else 'Just Now'}</div>
                         </div>""", unsafe_allow_html=True)
                 else: st.info("No headlines available via RSS.")
             else: st.info("News disabled for private data.")
@@ -420,7 +430,7 @@ elif nav == "Valuation (DCF)":
         
         fig = go.Figure()
         for k, v in results.items():
-            color = {'Bear':'#ef553b','Base':'#f1c40f','Bull':'#00cc96'}[k]
+            color = {'Bear':'#FF5252','Base':'#FFD740','Bull':'#69F0AE'}[k]
             fig.add_trace(go.Bar(y=[k], x=[v], orientation='h', text=f"${v:.2f}", marker_color=color))
         fig.update_layout(title="Fair Value Range", height=300, paper_bgcolor='rgba(0,0,0,0)', font=dict(color='#e6edf3'))
         st.plotly_chart(fig, use_container_width=True)
@@ -461,7 +471,7 @@ elif nav == "Risk Engine":
         
         if st.button("RUN SIMULATION"):
             results = base_price * np.exp(np.random.normal(-0.5 * volatility**2, volatility, sims))
-            fig = px.histogram(results, nbins=50, title="Price Probability Distribution (1Y)", color_discrete_sequence=['#d4af37'])
+            fig = px.histogram(results, nbins=50, title="Price Probability Distribution (1Y)", color_discrete_sequence=['#D4AF37'])
             fig.add_vline(x=base_price, line_dash="dash", line_color="white", annotation_text="Spot Price")
             fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', font=dict(color='#e6edf3'))
             st.plotly_chart(fig, use_container_width=True)
@@ -486,8 +496,8 @@ elif nav == "Health Check":
             with col2:
                 fig = go.Figure(go.Indicator(
                     mode="gauge+number", value=z,
-                    gauge={'axis': {'range': [0, 5]}, 'bar': {'color': "#d4af37"},
-                           'steps': [{'range': [0, 1.8], 'color': "#ef553b"}, {'range': [1.8, 3], 'color': "#f1c40f"}, {'range': [3, 5], 'color': "#00cc96"}]}
+                    gauge={'axis': {'range': [0, 5]}, 'bar': {'color': "#D4AF37"},
+                           'steps': [{'range': [0, 1.8], 'color': "#FF5252"}, {'range': [1.8, 3], 'color': "#FFD740"}, {'range': [3, 5], 'color': "#69F0AE"}]}
                 ))
                 fig.update_layout(height=250, paper_bgcolor='rgba(0,0,0,0)', font=dict(color='#e6edf3'))
                 st.plotly_chart(fig, use_container_width=True)
@@ -498,7 +508,7 @@ elif nav == "Health Check":
 st.markdown("""
 <div class="footer">
     <p>DEBIN CAPITAL ANALYTICS SUITE © 2025</p>
-    <p style="color: #484f58; font-size: 0.7rem;">
+    <p style="color: #666; font-size: 0.75rem;">
         Confidential & Proprietary. Built for professional valuation standards. <br>
         Market Data provided by Yahoo Finance (Delayed). Not financial advice.
     </p>
