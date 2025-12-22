@@ -7,6 +7,7 @@ import yfinance as yf
 from io import BytesIO
 from datetime import datetime
 from textblob import TextBlob
+import feedparser # NEW: For robust news fetching
 
 # --- 1. CONFIGURATION & STYLING (HIGH CONTRAST EDITION) ---
 st.set_page_config(page_title="GT Valuation Terminal", page_icon="💎", layout="wide")
@@ -291,7 +292,7 @@ def calculate_technical_indicators(df):
 
 with st.sidebar:
     st.title("GT Terminal")
-    st.markdown("`PROFESSIONAL SUITE V12.5`")
+    st.markdown("`PROFESSIONAL SUITE V12.6`")
     st.markdown("---")
     nav = st.radio("NAVIGATION", [
         "Project Setup", 
@@ -461,44 +462,58 @@ elif nav == "Live Market Data":
                               xaxis=dict(showgrid=False), yaxis=dict(showgrid=True, gridcolor='#30363d'))
             st.plotly_chart(fig, use_container_width=True)
         
-        st.subheader("Sentiment Analysis")
+        # --- ROBUST NEWS ENGINE (RSS FEED) ---
+        st.subheader("Market Sentiment (Live Feed)")
         try:
             if st.session_state.get('ticker') != "CUSTOM":
-                # Create Ticker Object
-                ticker_obj = yf.Ticker(st.session_state['ticker'])
-                news = ticker_obj.news
+                # Use Yahoo Finance RSS Feed instead of yfinance API
+                rss_url = f'https://finance.yahoo.com/rss/headline?s={st.session_state["ticker"]}'
+                feed = feedparser.parse(rss_url)
                 
-                if news:
-                    counter = 0
-                    for n in news:
-                        if counter >= 3: break
+                if feed.entries:
+                    for entry in feed.entries[:3]: # Limit to top 3
+                        title = entry.title
+                        link = entry.link
+                        published = entry.published if 'published' in entry else 'Just Now'
                         
-                        title = n.get('title', 'No Title')
-                        link = n.get('link', '#')
-                        
-                        # Perform Sentiment Analysis
+                        # Sentiment Analysis
                         blob = TextBlob(title)
                         score = blob.sentiment.polarity
                         
-                        if score > 0.1: color = "#00cc96" 
-                        elif score < -0.1: color = "#ef553b" 
-                        else: color = "#8b949e" 
+                        if score > 0.1: 
+                            color = "#00cc96" 
+                            mood = "Positive"
+                        elif score < -0.1: 
+                            color = "#ef553b" 
+                            mood = "Negative"
+                        else: 
+                            color = "#8b949e" 
+                            mood = "Neutral"
                             
                         st.markdown(
                             f"""
-                            <div style="background-color: rgba(22, 27, 34, 0.5); padding: 10px; border-radius: 5px; margin-bottom: 10px; border-left: 4px solid {color};">
-                                <a href="{link}" target="_blank" style="color: #e6edf3; text-decoration: none; font-weight: 600;">{title}</a>
+                            <div style="
+                                background-color: rgba(22, 27, 34, 0.6); 
+                                padding: 12px; 
+                                border-radius: 8px; 
+                                margin-bottom: 12px; 
+                                border-left: 5px solid {color};
+                                box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                    <span style="color: {color}; font-weight: 800; font-size: 0.8rem; text-transform: uppercase;">{mood}</span>
+                                    <span style="color: #8b949e; font-size: 0.8rem;">{published[:16]}</span>
+                                </div>
+                                <a href="{link}" target="_blank" style="color: #ffffff; text-decoration: none; font-weight: 600; font-size: 1rem; display: block;">{title}</a>
                             </div>
                             """, 
                             unsafe_allow_html=True
                         )
-                        counter += 1
                 else:
-                    st.info("No recent news found for this ticker.")
+                    st.info("No news found in RSS feed. This is likely a quiet ticker.")
             else:
                 st.info("News disabled for custom data.")
         except Exception as e:
-            st.error(f"News Error: {e}")
+            st.error(f"News System Error: {e}")
 
 # ----------------------------
 # 3. VALUATION (DCF)
