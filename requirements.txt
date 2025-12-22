@@ -5,3 +5,4 @@ plotly
 yfinance>=0.2.40
 textblob
 xlsxwriter
+feedparser
