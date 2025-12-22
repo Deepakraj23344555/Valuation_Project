@@ -7,3 +7,4 @@ openpyxl
 statsmodels
 textblob
 matplotlib
+xlsxwriter
