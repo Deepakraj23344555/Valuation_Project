@@ -40,35 +40,45 @@ st.markdown("""
     section[data-testid="stSidebar"] h3, 
     section[data-testid="stSidebar"] label, 
     section[data-testid="stSidebar"] span,
-    section[data-testid="stSidebar"] p {
-        color: #E2E8F0 !important; /* Cool White for Blue Background */
+    section[data-testid="stSidebar"] p,
+    section[data-testid="stSidebar"] div {
+        color: #E2E8F0 !important;
     }
 
     /* --------------------------------------------------------
-       3. TOP NAVIGATION BAR (Where the Name Goes)
+       3. TOP NAVIGATION BAR (FIXED & Z-INDEX BOOSTED)
        -------------------------------------------------------- */
+    /* Hide Default Streamlit Header to prevent overlap */
+    header[data-testid="stHeader"] {
+        background: transparent;
+        z-index: 1; 
+    }
+    
     .nav-container {
-        background: rgba(22, 19, 17, 0.95); /* Matches Main Brown */
-        backdrop-filter: blur(12px);
+        background: rgba(22, 19, 17, 1.0); /* Solid Brown to cover everything */
         border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        padding: 1rem 2rem;
+        padding: 0.8rem 2rem;
         position: fixed;
         top: 0; left: 0; right: 0;
-        z-index: 99999;
+        z-index: 999999; /* EXTREME Z-INDEX TO FORCE VISIBILITY */
         display: flex;
         justify-content: space-between;
         align-items: center;
         box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+        height: 80px;
     }
     
-    /* THE BRAND NAME STYLING */
     .nav-logo {
-        font-size: 1.8rem; /* Large Size */
+        font-size: 1.8rem;
         font-weight: 800;
-        letter-spacing: 2px;
+        letter-spacing: 1px;
         color: white;
         text-transform: uppercase;
+        display: flex;
+        align-items: center;
+        gap: 10px;
     }
+    
     .nav-logo span { 
         background: linear-gradient(90deg, #D4AF37 0%, #F2D06B 100%); /* Gold Gradient */
         -webkit-background-clip: text;
@@ -76,10 +86,12 @@ st.markdown("""
     }
     
     /* Push content down so it's not hidden behind navbar */
-    .block-container { padding-top: 6rem !important; }
+    .block-container { 
+        padding-top: 6rem !important; 
+    }
 
     /* --------------------------------------------------------
-       4. CARDS (Lighter Brown for Contrast)
+       4. CARDS & UI ELEMENTS
        -------------------------------------------------------- */
     div[data-testid="metric-container"] {
         background: #1F1B18; 
@@ -99,22 +111,17 @@ st.markdown("""
         font-size: 2rem !important;
     }
     div[data-testid="stMetricLabel"] {
-        color: #D4AF37 !important; /* Gold Labels */
+        color: #D4AF37 !important;
         font-size: 0.9rem !important;
         font-weight: 600 !important;
         text-transform: uppercase;
         letter-spacing: 1px;
     }
 
-    /* --------------------------------------------------------
-       5. GENERAL UI ELEMENTS
-       -------------------------------------------------------- */
     h1 { color: #ffffff !important; font-weight: 800; letter-spacing: -0.5px; }
     h2 { color: #e6e0d4 !important; border-bottom: 1px solid #332D28; padding-bottom: 10px; margin-top: 30px; }
     h3 { color: #D4AF37 !important; font-size: 1.2rem; font-weight: 700; margin-top: 20px; }
-    p, li, label, span { color: #dcd6cc; } 
-
-    /* INPUTS */
+    
     .stTextInput>div>div>input, .stNumberInput>div>div>input {
         background-color: #0F1218 !important; 
         color: white !important;
@@ -122,12 +129,7 @@ st.markdown("""
         border-radius: 6px;
         height: 50px;
     }
-    .stTextInput>div>div>input:focus, .stNumberInput>div>div>input:focus {
-        border-color: #D4AF37 !important;
-        box-shadow: 0 0 0 1px #D4AF37 !important;
-    }
-
-    /* BUTTONS (Gold Gradient) */
+    
     .stButton>button {
         background: linear-gradient(90deg, #C5A059 0%, #9A7B3E 100%); 
         color: #000000 !important;
@@ -144,11 +146,6 @@ st.markdown("""
         box-shadow: 0 6px 20px rgba(197, 160, 89, 0.4);
     }
 
-    /* TABS */
-    .stTabs [data-baseweb="tab"] { color: #888; font-weight: 600; }
-    .stTabs [aria-selected="true"] { color: #D4AF37; border-bottom-color: #D4AF37; }
-    
-    /* FOOTER */
     .footer {
         margin-top: 100px;
         border-top: 1px solid #332D28;
@@ -160,10 +157,10 @@ st.markdown("""
     </style>
     
     <div class="nav-container">
-        <div class="nav-logo">DEBIN <span>CAPITAL</span></div>
-        
+        <div class="nav-logo">🏛️ DEBIN <span>CAPITAL</span></div>
         <div style="display:flex; gap:20px; align-items:center;">
-             <span style="font-size:0.8rem; color:#A89F91; font-weight:600; letter-spacing:1px;">INSTITUTIONAL SUITE</span>
+             <span style="font-size:0.8rem; color:#A89F91; font-weight:600; letter-spacing:1px; text-transform:uppercase;">Institutional Suite</span>
+             <div style="width:10px; height:10px; background:#4CAF50; border-radius:50%; box-shadow:0 0 10px #4CAF50;"></div>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -178,7 +175,6 @@ def format_large(num):
     return f"{num:,.0f}"
 
 def fetch_news(ticker):
-    """Robust news fetcher with fallback."""
     news_items = []
     # Source 1: Google News RSS
     try:
@@ -200,9 +196,8 @@ def fetch_news(ticker):
             return news_items
     except: pass
 
-    # Fallback
-    return [{"title": f"Market Activity: High volume detected for {ticker}", "link": "#", "published": "Today"},
-            {"title": f"Sector Analysis: Tech sector showing movement", "link": "#", "published": "Today"}]
+    return [{"title": f"Market Analysis: High volume detected for {ticker}", "link": "#", "published": "Today"},
+            {"title": f"Sector Update: Trading activity analysis for {ticker}", "link": "#", "published": "Today"}]
 
 @st.cache_data
 def get_financial_data(ticker):
@@ -291,6 +286,14 @@ def calculate_technical_indicators(df):
 # --- 3. MAIN UI LAYOUT ---
 
 with st.sidebar:
+    # --- LOGO FOR SIDEBAR (Visible if Navbar is hidden on mobile) ---
+    st.markdown("""
+        <div style='text-align: center; margin-bottom: 20px;'>
+            <h2 style='color: white; margin:0; font-weight: 800; letter-spacing: 1px;'>DEBIN <span style='color:#D4AF37'>CAPITAL</span></h2>
+            <p style='color: #888; font-size: 0.8rem;'>PREMIUM ANALYTICS</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
     st.markdown("### 🧭 NAVIGATION")
     nav = st.radio("", ["Dashboard", "Market Data", "Valuation (DCF)", "Comps Analysis", "Risk Engine", "Health Check"])
     
