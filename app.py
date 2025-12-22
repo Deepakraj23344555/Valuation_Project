@@ -8,7 +8,7 @@ from io import BytesIO
 from datetime import datetime
 from textblob import TextBlob
 import feedparser
-from fpdf import FPDF  # NEW: For PDF Generation
+from fpdf import FPDF
 
 # --- 1. CONFIGURATION & "BLUE & BROWN" LUXURY THEME ---
 st.set_page_config(page_title="DEBIN CAPITAL | Valuation Suite", page_icon="🏛️", layout="wide")
@@ -18,41 +18,29 @@ st.markdown("""
     /* IMPORT FONTS */
     @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;700;800&display=swap');
 
-    /* --------------------------------------------------------
-       1. MAIN SCREEN -> PREMIUM ESPRESSO BROWN
-       -------------------------------------------------------- */
+    /* MAIN SCREEN -> PREMIUM ESPRESSO BROWN */
     .stApp { 
         background-color: #161311; 
         font-family: 'Manrope', sans-serif;
         color: #e6e0d4; 
     }
 
-    /* --------------------------------------------------------
-       2. SIDEBAR -> PREMIUM MIDNIGHT BLUE
-       -------------------------------------------------------- */
+    /* SIDEBAR -> PREMIUM MIDNIGHT BLUE */
     section[data-testid="stSidebar"] {
         background-color: #0B1221; 
         border-right: 1px solid #1E293B;
     }
     
     /* SIDEBAR TEXT COLORS */
-    section[data-testid="stSidebar"] h1, 
-    section[data-testid="stSidebar"] h2, 
-    section[data-testid="stSidebar"] h3, 
-    section[data-testid="stSidebar"] label, 
-    section[data-testid="stSidebar"] span,
-    section[data-testid="stSidebar"] p,
+    section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] h2, 
+    section[data-testid="stSidebar"] h3, section[data-testid="stSidebar"] label, 
+    section[data-testid="stSidebar"] span, section[data-testid="stSidebar"] p,
     section[data-testid="stSidebar"] div {
         color: #E2E8F0 !important;
     }
 
-    /* --------------------------------------------------------
-       3. TOP NAVIGATION BAR (FIXED & Z-INDEX BOOSTED)
-       -------------------------------------------------------- */
-    header[data-testid="stHeader"] {
-        background: transparent;
-        z-index: 1; 
-    }
+    /* TOP NAVIGATION BAR */
+    header[data-testid="stHeader"] { background: transparent; z-index: 1; }
     
     .nav-container {
         background: rgba(22, 19, 17, 1.0); 
@@ -85,13 +73,9 @@ st.markdown("""
         -webkit-text-fill-color: transparent;
     }
     
-    .block-container { 
-        padding-top: 6rem !important; 
-    }
+    .block-container { padding-top: 6rem !important; }
 
-    /* --------------------------------------------------------
-       4. CARDS & UI ELEMENTS
-       -------------------------------------------------------- */
+    /* CARDS & UI ELEMENTS */
     div[data-testid="metric-container"] {
         background: #1F1B18; 
         border: 1px solid #332D28;
@@ -121,12 +105,11 @@ st.markdown("""
     h2 { color: #e6e0d4 !important; border-bottom: 1px solid #332D28; padding-bottom: 10px; margin-top: 30px; }
     h3 { color: #D4AF37 !important; font-size: 1.2rem; font-weight: 700; margin-top: 20px; }
     
-    .stTextInput>div>div>input, .stNumberInput>div>div>input {
+    .stTextInput>div>div>input, .stNumberInput>div>div>input, .stTextArea>div>div>textarea {
         background-color: #0F1218 !important; 
         color: white !important;
         border: 1px solid #332D28 !important;
         border-radius: 6px;
-        height: 50px;
     }
     
     .stButton>button {
@@ -175,7 +158,6 @@ def format_large(num):
 
 def fetch_news(ticker):
     news_items = []
-    # Source 1: Google News RSS
     try:
         url = f"https://news.google.com/rss/search?q={ticker}+stock&hl=en-US&gl=US&ceid=US:en"
         feed = feedparser.parse(url)
@@ -185,7 +167,6 @@ def fetch_news(ticker):
             return news_items
     except: pass
     
-    # Source 2: Yahoo RSS
     try:
         url = f"https://finance.yahoo.com/rss/headline?s={ticker}"
         feed = feedparser.parse(url)
@@ -198,11 +179,11 @@ def fetch_news(ticker):
     return [{"title": f"Market Analysis: High volume detected for {ticker}", "link": "#", "published": "Today"},
             {"title": f"Sector Update: Trading activity analysis for {ticker}", "link": "#", "published": "Today"}]
 
-# NEW: PDF GENERATOR CLASS (Feature #3)
+# PDF GENERATOR
 class InvestmentMemo(FPDF):
     def header(self):
         self.set_font('Arial', 'B', 15)
-        self.set_text_color(212, 175, 55) # Gold Color
+        self.set_text_color(197, 160, 89) # Muted Gold
         self.cell(0, 10, 'DEBIN CAPITAL | INVESTMENT MEMO', 0, 1, 'C')
         self.ln(10)
 
@@ -216,16 +197,14 @@ def create_pdf_report(data, scenarios, wacc, z_score):
     pdf = InvestmentMemo()
     pdf.add_page()
     pdf.set_font("Arial", size=12)
-    pdf.set_text_color(0, 0, 0) # Black text for PDF readability
+    pdf.set_text_color(0, 0, 0)
     
-    # Title
     pdf.set_font("Arial", 'B', 16)
     pdf.cell(0, 10, f"Target Company: {data['name']}", 0, 1)
     pdf.set_font("Arial", size=10)
     pdf.cell(0, 10, f"Date: {datetime.now().strftime('%Y-%m-%d')}", 0, 1)
     pdf.ln(5)
     
-    # Executive Summary
     pdf.set_font("Arial", 'B', 14)
     pdf.cell(0, 10, "1. Executive Summary", 0, 1)
     pdf.set_font("Arial", size=11)
@@ -235,7 +214,6 @@ def create_pdf_report(data, scenarios, wacc, z_score):
                           f"Financial Health (Z-Score): {z_score:.2f}")
     pdf.ln(10)
     
-    # Scenarios
     pdf.set_font("Arial", 'B', 14)
     pdf.cell(0, 10, "2. Valuation Scenarios (DCF)", 0, 1)
     pdf.set_font("Arial", size=11)
@@ -281,10 +259,9 @@ def get_financial_data(ticker):
         tax_rate = (tax / pretax) if (pretax != 0 and tax != 0) else 0.25
         tax_rate = max(0.0, min(tax_rate, 0.40))
 
-        # UPDATED FOR DUPONT ANALYSIS (Feature #2)
         net_income = get_val(inc, ['Net Income', 'Net Income Common Stockholders'])
         equity = get_val(bs, ['Stockholders Equity', 'Total Stockholder Equity', 'Total Equity Gross Minority Interest'])
-        if equity == 0: equity = 1 # Avoid div/0
+        if equity == 0: equity = 1
 
         return {
             "name": info.get('longName', ticker), "sector": info.get('sector', 'Unknown'),
@@ -311,7 +288,7 @@ def process_uploaded_data(df_upload):
                                    'Open': np.linspace(row['Price']*0.8, row['Price'], 100), 
                                    'High': np.linspace(row['Price']*0.8, row['Price'], 100)*1.05, 
                                    'Low': np.linspace(row['Price']*0.8, row['Price'], 100)*0.95,
-                                   'Volume': np.random.randint(1000, 5000, 100)}, index=dates) # Added Dummy Volume
+                                   'Volume': np.random.randint(1000, 5000, 100)}, index=dates)
         return {
             "name": str(row.get('Company Name', 'Custom')), "sector": str(row.get('Sector', 'Unknown')),
             "price": float(row.get('Price', 0)), "mkt_cap": float(row.get('Market Cap', 0)),
@@ -334,25 +311,19 @@ def project_scenario(base_rev, years, growth, margin, current_year):
         data.append({'Year': current_year + i, 'Revenue': curr_rev, 'Implied_EBITDA': curr_rev * margin})
     return pd.DataFrame(data)
 
-# UPDATED: TECHNICAL INDICATORS (Feature #1)
 def calculate_technical_indicators(df):
     if len(df) < 50: return df
-    # SMA
     df['SMA_50'] = df['Close'].rolling(window=50).mean()
     df['SMA_200'] = df['Close'].rolling(window=200).mean()
-    
-    # Bollinger Bands
     df['BB_Middle'] = df['Close'].rolling(window=20).mean()
     std = df['Close'].rolling(window=20).std()
     df['BB_Upper'] = df['BB_Middle'] + (std * 2)
     df['BB_Lower'] = df['BB_Middle'] - (std * 2)
-    
     return df
 
 # --- 3. MAIN UI LAYOUT ---
 
 with st.sidebar:
-    # Sidebar Header
     st.markdown("""
         <div style='text-align: center; margin-bottom: 20px;'>
             <h2 style='color: white; margin:0; font-weight: 800; letter-spacing: 1px;'>DEBIN <span style='color:#D4AF37'>CAPITAL</span></h2>
@@ -361,23 +332,18 @@ with st.sidebar:
     """, unsafe_allow_html=True)
     
     st.markdown("### 🧭 NAVIGATION")
-    nav = st.radio("", ["Dashboard", "Market Data", "Valuation (DCF)", "Comps Analysis", "Risk Engine", "Health Check"])
+    nav = st.radio("", ["Dashboard", "Market Data", "Valuation (DCF)", "Comps Analysis", "Portfolio Optimizer", "Risk Engine", "Health Check", "AI Analyst Report"])
     
     st.markdown("---")
     st.markdown("### 📥 ACTIONS")
     if 'data' in st.session_state:
         d = st.session_state['data']
-        
-        # FEATURE 3: PDF Export Button
         if 'results' in st.session_state and 'wacc' in st.session_state:
-            # Simple Z-score calc for PDF
             ta = d['total_assets'] if d['total_assets'] > 0 else 1
             z = 1.2*(d['wc']/ta) + 1.4*(d['retained_earnings']/ta) + 3.3*(d['ebit']/ta) + 0.6*(d['mkt_cap']/d['total_liab']) + 1.0*(d['revenue']/ta)
-            
             pdf_bytes = create_pdf_report(d, st.session_state['results'], st.session_state['wacc'], z)
             st.download_button("📑 Inv. Memo (PDF)", pdf_bytes, file_name=f"{d['name']}_Memo.pdf", mime="application/pdf")
         
-        # Excel Export
         try:
             import xlsxwriter
             output = BytesIO()
@@ -441,34 +407,26 @@ if nav == "Dashboard":
                           font=dict(color='#dcd6cc'))
         st.plotly_chart(fig, use_container_width=True)
 
-# 2. MARKET DATA (Feature #1 Integrated)
+# 2. MARKET DATA
 elif nav == "Market Data":
     st.title("Live Market Intelligence")
     if 'data' in st.session_state:
         d = st.session_state['data']
-        # METRICS
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Asset Price", f"${d['price']:,.2f}")
         c2.metric("Market Cap", format_large(d['mkt_cap']))
         c3.metric("Beta (Risk)", f"{d['beta']:.2f}")
         c4.metric("Risk-Free Rate", f"{d['rf_rate']:.2%}")
 
-        # CHART
         st.markdown("### 📉 Technical Strategy Map")
         if not d['hist'].empty:
             hist = calculate_technical_indicators(d['hist'].copy())
             fig = go.Figure()
-            
-            # 1. Price Candles
             fig.add_trace(go.Candlestick(x=hist.index, open=hist['Open'], high=hist['High'], low=hist['Low'], close=hist['Close'], name='Price',
                                          increasing_line_color='#69F0AE', decreasing_line_color='#FF5252'))
-            
-            # 2. Bollinger Bands
             if 'BB_Upper' in hist.columns:
                 fig.add_trace(go.Scatter(x=hist.index, y=hist['BB_Upper'], line=dict(color='rgba(212, 175, 55, 0.5)', width=1), name='Upper BB', hoverinfo='skip'))
                 fig.add_trace(go.Scatter(x=hist.index, y=hist['BB_Lower'], line=dict(color='rgba(212, 175, 55, 0.5)', width=1), name='Lower BB', fill='tonexty', fillcolor='rgba(212, 175, 55, 0.1)', hoverinfo='skip'))
-            
-            # 3. SMA
             if 'SMA_50' in hist.columns:
                 fig.add_trace(go.Scatter(x=hist.index, y=hist['SMA_50'], line=dict(color='#00E5FF', width=1.5), name='SMA 50'))
 
@@ -477,7 +435,6 @@ elif nav == "Market Data":
                               yaxis=dict(showgrid=True, gridcolor='#332D28', title="Price ($)"))
             st.plotly_chart(fig, use_container_width=True)
             
-            # Volume Chart
             if 'Volume' in hist.columns:
                 vol = go.Figure(data=[go.Bar(x=hist.index, y=hist['Volume'], marker_color='#332D28')])
                 vol.update_layout(height=150, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
@@ -486,7 +443,6 @@ elif nav == "Market Data":
         else:
             st.info("Price history unavailable.")
         
-        # NEWS
         st.markdown("### Market Sentiment")
         try:
             if st.session_state['ticker'] != "CUSTOM":
@@ -522,7 +478,7 @@ elif nav == "Valuation (DCF)":
             tgr = c5.slider("Terminal Growth %", 1.0, 5.0, 2.5) / 100
         
         wacc = (ke * (1 - debt_w)) + (kd * (1 - tax) * debt_w)
-        st.session_state['wacc'] = wacc # Save for PDF
+        st.session_state['wacc'] = wacc 
         st.metric("WACC", f"{wacc:.2%}")
         
         results = {}
@@ -533,7 +489,7 @@ elif nav == "Valuation (DCF)":
             val = (pv - (d['total_debt'] - d['cash'])) / d['shares']
             results[k] = val
         
-        st.session_state['results'] = results # Save for PDF
+        st.session_state['results'] = results 
         
         st.markdown("### Valuation Output")
         c1, c2, c3 = st.columns(3)
@@ -574,7 +530,28 @@ elif nav == "Comps Analysis":
             st.plotly_chart(fig, use_container_width=True)
         else: st.error("No Peer Data Found.")
 
-# 5. RISK ENGINE
+# 5. NEW: PORTFOLIO OPTIMIZER (Feature #4)
+elif nav == "Portfolio Optimizer":
+    st.title("Portfolio Optimization (MPT)")
+    if 'data' in st.session_state:
+        st.info("Simulate adding this asset to a standard 60/40 Portfolio (SPY/AGG).")
+        
+        weights = st.slider("Weight Allocation (Target Asset vs Portfolio)", 0, 100, 10)
+        
+        # Simulating Efficient Frontier Data (Placeholder for speed)
+        risk_data = np.linspace(0.05, 0.25, 50)
+        return_data = np.log(risk_data * 5 + 1) * 0.15
+        
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=risk_data, y=return_data, mode='lines', name='Efficient Frontier', line=dict(color='#D4AF37')))
+        fig.add_trace(go.Scatter(x=[0.12], y=[0.08], mode='markers', marker=dict(size=12, color='#69F0AE'), name='Your Portfolio'))
+        
+        fig.update_layout(title="Risk vs Return Trade-off", xaxis_title="Risk (Volatility)", yaxis_title="Expected Return",
+                          paper_bgcolor='rgba(0,0,0,0)', font=dict(color='#dcd6cc'))
+        st.plotly_chart(fig, use_container_width=True)
+    else: st.warning("Load Data First.")
+
+# 6. RISK ENGINE
 elif nav == "Risk Engine":
     st.title("Monte Carlo Risk Engine")
     if 'data' in st.session_state:
@@ -591,23 +568,21 @@ elif nav == "Risk Engine":
             st.metric("Value at Risk (95%)", f"${np.percentile(results, 5):.2f}")
     else: st.warning("Load Data First.")
 
-# 6. HEALTH CHECK (Feature #2: DuPont Analysis Integrated)
+# 7. HEALTH CHECK & DUPONT (Feature #2 Integrated)
 elif nav == "Health Check":
     st.title("Solvency & Performance Diagnostics")
     if 'data' in st.session_state:
         d = st.session_state['data']
         try:
-            # Altman Z-Score
             ta = d['total_assets'] if d['total_assets'] > 0 else 1
             z = 1.2*(d['wc']/ta) + 1.4*(d['retained_earnings']/ta) + 3.3*(d['ebit']/ta) + 0.6*(d['mkt_cap']/d['total_liab']) + 1.0*(d['revenue']/ta)
             
-            # DuPont Analysis Components
+            # DuPont Calc
             net_margin = (d['net_income'] / d['revenue']) if d['revenue'] else 0
             asset_turnover = (d['revenue'] / ta)
             fin_leverage = (ta / d['equity']) if d['equity'] else 1
             roe = net_margin * asset_turnover * fin_leverage
             
-            # Display Z-Score
             col1, col2 = st.columns([1,2])
             with col1:
                 st.metric("Altman Z-Score", f"{z:.2f}")
@@ -631,6 +606,31 @@ elif nav == "Health Check":
             d4.metric("Return on Equity (ROE)", f"{roe:.1%}", help="Total Return")
             
         except: st.error("Insufficient Data for Full Diagnostics")
+    else: st.warning("Load Data First.")
+
+# 8. NEW: AI ANALYST REPORT (Feature #5)
+elif nav == "AI Analyst Report":
+    st.title("AI-Generated Investment Summary")
+    if 'data' in st.session_state:
+        d = st.session_state['data']
+        st.markdown(f"""
+        ### Executive Summary for {d['name']}
+        
+        **Overview:**
+        {d['name']} operates within the {d['sector']} sector. The company currently trades at **${d['price']:.2f}** with a market capitalization of **{format_large(d['mkt_cap'])}**.
+        
+        **Financial Health:**
+        The company's calculated **WACC is {st.session_state.get('wacc', 0.10):.2%}**, indicating its cost of capital hurdle. The efficiency tax rate stands at **{d['eff_tax_rate']:.1%}**.
+        
+        **Valuation Perspective:**
+        Our DCF model indicates a Base Case valuation of **${st.session_state.get('results', {}).get('Base', 0):.2f}**.
+        Compare this intrinsic value to the current trading price to determine your margin of safety.
+        
+        *Note: This report is algorithmically generated based on current inputs.*
+        """)
+        
+        st.text_area("Add Your Own Analyst Notes", height=150)
+        st.button("Save Notes to Report")
     else: st.warning("Load Data First.")
 
 # --- FOOTER ---
