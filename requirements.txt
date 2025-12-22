@@ -2,7 +2,7 @@ streamlit
 pandas
 numpy
 plotly
-yfinance
+yfinance>=0.2.40
 openpyxl
 statsmodels
 textblob
